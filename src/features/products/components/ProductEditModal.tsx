@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
+import ReactDOM from "react-dom";
 import {
   X,
   Package,
@@ -36,6 +37,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
   onProductUpdated,
 }) => {
   const _instanceId = React.useRef(Math.random().toString(36).slice(2, 9));
+  const isMountedRef = useRef(true);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -47,6 +49,15 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
       console.log(`[unmount] ProductEditModal id=${_instanceId.current} product=${product?.bar_code} time=${Date.now()}`);
     };
   }, [isOpen, product?.bar_code]);
+
+  // Control del ciclo de vida del componente
+  useLayoutEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -66,12 +77,26 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
 
   // Cargar categorías
   useEffect(() => {
-    if (isOpen) {
-      categoryService
-        .getCategories()
-        .then((data) => setCategories(data.results || []))
-        .catch((error) => console.error("Error loading categories:", error));
-    }
+    if (!isOpen) return;
+    
+    let isMounted = true;
+    
+    categoryService
+      .getCategories()
+      .then((data) => {
+        if (isMounted && isMountedRef.current) {
+          setCategories(data.results || []);
+        }
+      })
+      .catch((error) => {
+        if (isMounted && isMountedRef.current) {
+          console.error("Error loading categories:", error);
+        }
+      });
+      
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen]);
 
   // Cargar datos del producto
@@ -234,14 +259,23 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
 
       console.log("✅ Producto actualizado exitosamente");
       
-      // IMPORTANTE: Resetear loading
-      setLoading(false);
+      // Verificar si el componente sigue montado antes de actualizar estado
+      if (!isMountedRef.current) {
+        console.log("⚠️ Componente desmontado, cancelando actualización de estado");
+        return;
+      }
       
-      // Notificar la actualización (esto cerrará el modal desde el padre)
+      setLoading(false);
       onProductUpdated(updatedProduct);
       
     } catch (error: any) {
       console.error("❌ Error al actualizar:", error);
+
+      // Verificar si el componente sigue montado antes de actualizar estado
+      if (!isMountedRef.current) {
+        console.log("⚠️ Componente desmontado, cancelando actualización de error");
+        return;
+      }
 
       const errorMessage =
         error.response?.data?.detail ||
@@ -256,7 +290,6 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
   if (!isOpen || !product) return null;
 
   const modalContent = (
-    <>
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           {/* Header */}
@@ -499,10 +532,9 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
         </form>
       </div>
     </div>
-    </>
   );
 
-  return modalContent;
+  return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default ProductEditModal;
