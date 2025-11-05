@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
-import ReactDOM from "react-dom";
+import React, { useState, useEffect, useRef } from "react";
 import { ApiClientError, ValidationError } from "../../../shared/services/api/apiClient";
 import {
   X,
@@ -37,30 +36,10 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
   product,
   onProductUpdated,
 }) => {
-  const _instanceId = React.useRef(Math.random().toString(36).slice(2, 9));
   const isMountedRef = useRef(true);
-  const modalContainerRef = useRef<HTMLDivElement | null>(null);
 
-  if (!modalContainerRef.current && typeof document !== "undefined") {
-    modalContainerRef.current = document.createElement("div");
-    modalContainerRef.current.setAttribute("data-modal-root", "product-edit-modal");
-  }
-
-  React.useEffect(() => {
-    if (isOpen) {
-      // tslint:disable-next-line:no-console
-      console.log(`[mount] ProductEditModal id=${_instanceId.current} product=${product?.bar_code} time=${Date.now()}`);
-    }
-    return () => {
-      // tslint:disable-next-line:no-console
-      console.log(`[unmount] ProductEditModal id=${_instanceId.current} product=${product?.bar_code} time=${Date.now()}`);
-    };
-  }, [isOpen, product?.bar_code]);
-
-  // Control del ciclo de vida del componente
-  useLayoutEffect(() => {
+  useEffect(() => {
     isMountedRef.current = true;
-    
     return () => {
       isMountedRef.current = false;
     };
@@ -72,6 +51,8 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     retail_price: 0,
     cost_price: 0,
     category: 1,
+    minimum_stock: 0,
+    maximum_stock: 0,
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -138,6 +119,8 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
         retail_price: product.retail_price,
         cost_price: product.cost_price,
         category: product.category,
+        minimum_stock: product.minimum_stock ?? 0,
+        maximum_stock: product.maximum_stock ?? 0,
       });
 
       if (product.main_image) {
@@ -254,6 +237,22 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
       newErrors.category = "Categoría requerida";
     }
 
+    if (formData.minimum_stock < 0) {
+      newErrors.minimum_stock = "El stock mínimo no puede ser negativo";
+    }
+
+    if (formData.maximum_stock < 0) {
+      newErrors.maximum_stock = "El stock máximo no puede ser negativo";
+    }
+
+    if (
+      formData.maximum_stock > 0 &&
+      formData.minimum_stock > 0 &&
+      formData.maximum_stock < formData.minimum_stock
+    ) {
+      newErrors.maximum_stock = "El stock máximo debe ser mayor o igual al mínimo";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -289,17 +288,15 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
 
       console.log("✅ Producto actualizado exitosamente");
       
-      // Aplicar estado primero
       if (isMountedRef.current) {
         setLoading(false);
-      }
-      
-      // Cerrar modal después de que React aplique el estado
-      setTimeout(() => {
-        if (isMountedRef.current) {
+        // Primero cerrar el modal
+        onClose();
+        // Luego notificar al padre (después de que el modal esté cerrado)
+        setTimeout(() => {
           onProductUpdated(updatedProduct);
-        }
-      }, 0);
+        }, 100);
+      }
       
     } catch (error: unknown) {
       console.error("❌ Error al actualizar:", error);
@@ -324,32 +321,11 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     }
   };
 
-  useLayoutEffect(() => {
-    const container = modalContainerRef.current;
-    if (!container || typeof document === "undefined") {
-      return;
-    }
-
-    if (isOpen && !document.body.contains(container)) {
-      document.body.appendChild(container);
-    }
-
-    if (!isOpen && container.parentNode) {
-      container.parentNode.removeChild(container);
-    }
-
-    return () => {
-      if (container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
-    };
-  }, [isOpen]);
-
   if (!isOpen || !product) {
     return null;
   }
 
-  return ReactDOM.createPortal(
+  return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
@@ -445,6 +421,57 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
               {errors.category && (
                 <p className="text-red-500 text-xs mt-1">{errors.category}</p>
               )}
+            </div>
+
+            {/* Límites de stock */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Stock Mínimo
+                </label>
+                <input
+                  type="number"
+                  name="minimum_stock"
+                  value={formData.minimum_stock}
+                  onChange={handleInputChange}
+                  min="0"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                    errors.minimum_stock ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="Ej: 10"
+                  disabled={loading}
+                />
+                {errors.minimum_stock && (
+                  <p className="text-red-500 text-xs mt-1">{errors.minimum_stock}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Define el nivel al que se debe reordenar.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Stock Máximo
+                </label>
+                <input
+                  type="number"
+                  name="maximum_stock"
+                  value={formData.maximum_stock}
+                  onChange={handleInputChange}
+                  min="0"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                    errors.maximum_stock ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="Ej: 50"
+                  disabled={loading}
+                />
+                {errors.maximum_stock && (
+                  <p className="text-red-500 text-xs mt-1">{errors.maximum_stock}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Límite superior recomendado para stock disponible.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -591,8 +618,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
         </div>
       </form>
     </div>
-  </div>,
-  modalContainerRef.current!
+  </div>
   );
 };
 

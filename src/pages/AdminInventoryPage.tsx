@@ -31,8 +31,21 @@ interface InventoryItem {
 
 type MovementType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'TRANSFER';
 
+interface MovementLocationForm {
+  aisle: string;
+  shelf: string;
+  bin: string;
+}
+
+const createEmptyMovementLocation = (): MovementLocationForm => ({
+  aisle: '',
+  shelf: '',
+  bin: ''
+});
+
 export const AdminInventoryPage: React.FC = () => {
   const navigate = useNavigate();
+  const INVENTORY_FETCH_PAGE_SIZE = 200;
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [allProducts, setAllProducts] = useState<any[]>([]); // Todos los productos disponibles
   const [loading, setLoading] = useState(false);
@@ -41,6 +54,7 @@ export const AdminInventoryPage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [selectedProductCode, setSelectedProductCode] = useState<string>(''); // Para nueva entrada
   const [selectedWarehouseCode, setSelectedWarehouseCode] = useState<string>(''); // Para nueva entrada
+  const [transferDestinationCode, setTransferDestinationCode] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLocation, setFilterLocation] = useState<string>('');
   
@@ -58,8 +72,27 @@ export const AdminInventoryPage: React.FC = () => {
     notes: ''
   });
 
+  const [movementLocation, setMovementLocation] = useState<MovementLocationForm>(createEmptyMovementLocation);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(15);
+  const [tablePage, setTablePage] = useState<number>(1);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [locations, setLocations] = useState<any[]>([]);
+
+  const resetMovementForm = () => {
+    setMovementData({ movement_type: 'ENTRY', quantity: 0, notes: '' });
+    setSelectedProductCode('');
+    setSelectedWarehouseCode('');
+    setTransferDestinationCode('');
+    setMovementLocation(createEmptyMovementLocation());
+    setErrors({});
+  };
+
+  const handleCloseMovementModal = () => {
+    setShowMovementModal(false);
+    setSelectedItem(null);
+    resetMovementForm();
+  };
 
   useEffect(() => {
     loadInventoryItems();
@@ -67,12 +100,96 @@ export const AdminInventoryPage: React.FC = () => {
     loadAllProducts(); // Cargar todos los productos
   }, []);
 
+  useEffect(() => {
+    setTablePage(1);
+  }, [searchTerm, filterLocation, inventoryItems.length, itemsPerPage]);
+
+  useEffect(() => {
+    const isEntry = movementData.movement_type === 'ENTRY';
+    const isTransfer = movementData.movement_type === 'TRANSFER';
+    const targetWarehouseCode = isTransfer ? transferDestinationCode : selectedWarehouseCode;
+
+    if (!isEntry && !(isTransfer && targetWarehouseCode)) {
+      setMovementLocation((prev) => {
+        if (!prev.aisle && !prev.shelf && !prev.bin) {
+          return prev;
+        }
+        return createEmptyMovementLocation();
+      });
+      return;
+    }
+
+    if (!selectedProductCode || !targetWarehouseCode) {
+      setMovementLocation((prev) => {
+        if (!prev.aisle && !prev.shelf && !prev.bin) {
+          return prev;
+        }
+        return createEmptyMovementLocation();
+      });
+      return;
+    }
+
+    const existing = inventoryItems.find(
+      (item) =>
+        item.product_code === selectedProductCode &&
+        item.warehouse_code === targetWarehouseCode
+    );
+
+    if (existing) {
+      const nextLocation = {
+        aisle: existing.aisle || '',
+        shelf: existing.shelf || '',
+        bin: existing.bin || ''
+      };
+      setMovementLocation((prev) => {
+        if (
+          prev.aisle === nextLocation.aisle &&
+          prev.shelf === nextLocation.shelf &&
+          prev.bin === nextLocation.bin
+        ) {
+          return prev;
+        }
+        return nextLocation;
+      });
+    } else {
+      setMovementLocation((prev) => {
+        if (!prev.aisle && !prev.shelf && !prev.bin) {
+          return prev;
+        }
+        return createEmptyMovementLocation();
+      });
+    }
+  }, [
+    movementData.movement_type,
+    selectedProductCode,
+    selectedWarehouseCode,
+    transferDestinationCode,
+    inventoryItems
+  ]);
+
+  useEffect(() => {
+    if (movementData.movement_type !== 'ENTRY' && movementData.movement_type !== 'TRANSFER') {
+      setErrors((prev) => {
+        if (!prev.aisle && !prev.shelf && !prev.bin) {
+          return prev;
+        }
+
+        const { aisle, shelf, bin, ...rest } = prev;
+        return rest;
+      });
+    }
+  }, [movementData.movement_type]);
+
   const loadInventoryItems = async () => {
     try {
       setLoading(true);
-      const response = await inventoryService.getInventoryItems();
+      const response = await inventoryService.getInventoryItems({
+        page: 1,
+        page_size: INVENTORY_FETCH_PAGE_SIZE
+      });
       console.log('📦 Inventario cargado:', response);
       setInventoryItems(response.results || []);
+      setTablePage(1);
     } catch (error) {
       console.error('Error al cargar inventario:', error);
     } finally {
@@ -147,24 +264,60 @@ export const AdminInventoryPage: React.FC = () => {
 
   const handleCreateMovement = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validaciones
+
+    const validationErrors: Record<string, string> = {};
+
     if (movementData.quantity <= 0) {
-      setErrors({ quantity: 'La cantidad debe ser mayor a 0' });
-      return;
+      validationErrors.quantity = 'La cantidad debe ser mayor a 0';
     }
 
-    // Obtener códigos de producto y bodega
     const productCode = selectedItem?.product_code || selectedProductCode;
     const warehouseCode = selectedItem?.warehouse_code || selectedWarehouseCode;
+    const hasProduct = Boolean(productCode);
+    const hasWarehouse = Boolean(warehouseCode);
 
-    if (!productCode || !warehouseCode) {
-      const newErrors: Record<string, string> = { 
-        general: 'Debe seleccionar un producto y una bodega'
-      };
-      if (!productCode) newErrors.product = 'Seleccione un producto';
-      if (!warehouseCode) newErrors.warehouse = 'Seleccione una bodega';
-      setErrors(newErrors);
+    if (!hasProduct) {
+      validationErrors.product = 'Seleccione un producto';
+    }
+    if (!hasWarehouse) {
+      validationErrors.warehouse = 'Seleccione una bodega';
+    }
+    if (!hasProduct || !hasWarehouse) {
+      validationErrors.general = 'Debe seleccionar un producto y una bodega';
+    }
+
+    const sanitizedLocation = {
+      aisle: movementLocation.aisle.trim(),
+      shelf: movementLocation.shelf.trim(),
+      bin: movementLocation.bin.trim()
+    };
+
+    const needsLocationDetails =
+      movementData.movement_type === 'ENTRY' && hasProduct && hasWarehouse;
+
+    if (needsLocationDetails) {
+      if (!sanitizedLocation.aisle) {
+        validationErrors.aisle = 'Ingresa el pasillo';
+      }
+      if (!sanitizedLocation.shelf) {
+        validationErrors.shelf = 'Ingresa la estantería';
+      }
+      if (!sanitizedLocation.bin) {
+        validationErrors.bin = 'Ingresa la posición';
+      }
+      if (
+        !sanitizedLocation.aisle ||
+        !sanitizedLocation.shelf ||
+        !sanitizedLocation.bin
+      ) {
+        if (!validationErrors.general) {
+          validationErrors.general = 'Completa los detalles de ubicación para registrar la entrada';
+        }
+      }
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
       return;
     }
 
@@ -172,43 +325,83 @@ export const AdminInventoryPage: React.FC = () => {
       setLoading(true);
       
       // Mapear tipo de movimiento
-      const movementTypeMap: Record<MovementType, 'entry' | 'exit' | 'adjustment'> = {
+      const movementTypeMap: Record<MovementType, 'entry' | 'exit' | 'adjustment' | 'transfer'> = {
         'ENTRY': 'entry',
         'EXIT': 'exit',
         'ADJUSTMENT': 'adjustment',
-        'TRANSFER': 'entry' // Transfer se maneja como entry por ahora
+        'TRANSFER': 'transfer'
       };
 
-      const movementPayload = {
-        movement_type: movementTypeMap[movementData.movement_type],
-        product_barcode: productCode,
-        to_location_code: warehouseCode,
+      const movementType = movementTypeMap[movementData.movement_type];
+
+      const movementPayload: Parameters<typeof inventoryService.createMovement>[0] = {
+        movement_type: movementType,
+        product_barcode: productCode as string,
         quantity: movementData.quantity,
         notes: movementData.notes || `Movimiento de ${movementData.movement_type}`,
         reference_number: `MOV-${Date.now()}`
       };
 
+      if (movementType === 'entry' || movementType === 'adjustment') {
+        movementPayload.to_location_code = warehouseCode as string;
+      }
+
+      if (movementType === 'exit') {
+        movementPayload.from_location_code = warehouseCode as string;
+      }
+
+      if (movementType === 'transfer') {
+        movementPayload.from_location_code = warehouseCode as string;
+        if (transferDestinationCode) {
+          movementPayload.to_location_code = transferDestinationCode;
+        }
+      }
+
+      const locationCanBeSent = movementType === 'entry' || movementType === 'adjustment';
+
+      if (locationCanBeSent && sanitizedLocation.aisle) {
+        movementPayload.aisle = sanitizedLocation.aisle;
+      }
+      if (locationCanBeSent && sanitizedLocation.shelf) {
+        movementPayload.shelf = sanitizedLocation.shelf;
+      }
+      if (locationCanBeSent && sanitizedLocation.bin) {
+        movementPayload.bin = sanitizedLocation.bin;
+      }
+
       console.log('📝 Creando movimiento:', movementPayload);
 
       await inventoryService.createMovement(movementPayload);
-      
-      alert(`✅ Movimiento registrado exitosamente!\n\n` +
-            `Producto: ${allProducts.find(p => p.bar_code === productCode)?.name || productCode}\n` +
-            `Tipo: ${movementData.movement_type}\n` +
-            `Cantidad: ${movementData.quantity}`);
-      
-      // Resetear
-      setMovementData({ movement_type: 'ENTRY', quantity: 0, notes: '' });
-      setSelectedProductCode('');
-      setSelectedWarehouseCode('');
-      setErrors({});
-      setShowMovementModal(false);
-      setSelectedItem(null);
-      
-      // Recargar
+
+      const productName = allProducts.find((p) => p.bar_code === productCode)?.name || productCode;
+      const locationDetailLines = [
+        sanitizedLocation.aisle && `Pasillo: ${sanitizedLocation.aisle}`,
+        sanitizedLocation.shelf && `Estante: ${sanitizedLocation.shelf}`,
+        sanitizedLocation.bin && `Posición: ${sanitizedLocation.bin}`
+      ].filter(Boolean);
+      const shouldShowLocationDetails = locationCanBeSent && locationDetailLines.length > 0;
+
+      let successMessage = `✅ Movimiento registrado exitosamente!\n\n` +
+        `Producto: ${productName}\n` +
+        `Tipo: ${movementData.movement_type}\n` +
+        `Cantidad: ${movementData.quantity}`;
+
+      if (shouldShowLocationDetails) {
+        successMessage += `\n${locationDetailLines.join('\n')}`;
+      }
+
+      if (movementType === 'exit') {
+        const exitLocationName = selectedItem?.warehouse_name ||
+          locations.find((loc) => loc.code === warehouseCode)?.name ||
+          warehouseCode;
+        successMessage += `\nUbicación origen: ${exitLocationName}`;
+      }
+
+      alert(successMessage);
+
       await loadInventoryItems();
-      
-      alert('✅ Movimiento registrado exitosamente');
+
+      handleCloseMovementModal();
     } catch (error: any) {
       console.error('Error al crear movimiento:', error);
       setErrors({ general: error.message || 'Error al registrar el movimiento' });
@@ -229,9 +422,27 @@ export const AdminInventoryPage: React.FC = () => {
     setSelectedProductCode(item?.product_code || '');
     setSelectedWarehouseCode(item?.warehouse_code || '');
     setMovementData({ movement_type: type, quantity: 0, notes: '' });
+    setMovementLocation(
+      item
+        ? {
+            aisle: item.aisle || '',
+            shelf: item.shelf || '',
+            bin: item.bin || ''
+          }
+        : createEmptyMovementLocation()
+    );
     setErrors({});
     setShowMovementModal(true);
   };
+
+  const currentMovementItem = selectedItem ||
+    (selectedProductCode && selectedWarehouseCode
+      ? inventoryItems.find(
+          (item) =>
+            item.product_code === selectedProductCode &&
+            item.warehouse_code === selectedWarehouseCode
+        )
+      : undefined);
 
   // Filtrar items
   const filteredItems = inventoryItems.filter(item => {
@@ -244,6 +455,21 @@ export const AdminInventoryPage: React.FC = () => {
     
     return matchesSearch && matchesLocation;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
+  const paginatedItems = filteredItems.slice(
+    (tablePage - 1) * itemsPerPage,
+    tablePage * itemsPerPage
+  );
+  const showingFrom = filteredItems.length === 0 ? 0 : (tablePage - 1) * itemsPerPage + 1;
+  const showingTo = filteredItems.length === 0 ? 0 : Math.min(filteredItems.length, tablePage * itemsPerPage);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filteredItems.length / itemsPerPage));
+    if (tablePage > maxPage) {
+      setTablePage(maxPage);
+    }
+  }, [filteredItems.length, itemsPerPage, tablePage]);
 
   // Calcular estadísticas mejoradas
   const totalItems = inventoryItems.length;
@@ -287,6 +513,25 @@ export const AdminInventoryPage: React.FC = () => {
     } else {
       return `$${num.toLocaleString('es-CO')}`;
     }
+  };
+
+  const formatMovementDate = (dateString?: string): string => {
+    if (!dateString) {
+      return 'Sin registro';
+    }
+
+    const parsedDate = new Date(dateString);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return dateString;
+    }
+
+    return parsedDate.toLocaleString('es-CO', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   // Debug
@@ -598,9 +843,15 @@ export const AdminInventoryPage: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((item) => {
+                  paginatedItems.map((item) => {
                     const isLowStock = item.current_stock <= (item.minimum_stock || 0);
                     const isOutOfStock = item.current_stock === 0;
+                    const locationBadges = [
+                      { label: 'Pasillo', value: item.aisle },
+                      { label: 'Estante', value: item.shelf },
+                      { label: 'Posición', value: item.bin }
+                    ].filter(detail => Boolean(detail.value));
+                    const hasLocationDetail = locationBadges.length > 0;
                     
                     return (
                       <tr key={item.id} className="hover:bg-gray-50">
@@ -614,10 +865,29 @@ export const AdminInventoryPage: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
-                            {item.warehouse_name}
-                          </span>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                              {item.warehouse_name}
+                            </span>
+                            {hasLocationDetail ? (
+                              locationBadges.map(({ label, value }) => (
+                                <span
+                                  key={label}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+                                >
+                                  {label}: {value}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-600 border border-orange-200">
+                                Sin detalle de ubicación
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">
+                            Último movimiento: <span className="font-medium text-gray-700">{formatMovementDate(item.last_movement_date)}</span>
+                          </p>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`text-sm font-bold ${
@@ -671,6 +941,52 @@ export const AdminInventoryPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {filteredItems.length > 0 && (
+            <div className="flex flex-col gap-4 px-6 py-4 border-t border-gray-200 bg-white md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Mostrar</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {[15, 25, 50, 100].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+                <span>por página</span>
+              </div>
+
+              <div className="flex flex-col gap-2 text-sm text-gray-600 md:flex-row md:items-center md:gap-4">
+                <span>
+                  Mostrando {showingFrom}-{showingTo} de {filteredItems.length} productos
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTablePage((prev) => Math.max(1, prev - 1))}
+                    disabled={tablePage === 1}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Página {filteredItems.length === 0 ? 0 : tablePage} de {filteredItems.length === 0 ? 0 : totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTablePage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={tablePage >= totalPages || filteredItems.length === 0}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -771,7 +1087,7 @@ export const AdminInventoryPage: React.FC = () => {
                 </p>
               </div>
               <button
-                onClick={() => setShowMovementModal(false)}
+                onClick={handleCloseMovementModal}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 ✕
@@ -863,6 +1179,86 @@ export const AdminInventoryPage: React.FC = () => {
               )}
 
               <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Detalles de ubicación
+                    {movementData.movement_type === 'ENTRY' && (
+                      <span className="text-red-500"> *</span>
+                    )}
+                  </p>
+                  {movementData.movement_type === 'ENTRY' && (
+                    <span className="text-xs text-gray-500">
+                      Requerido para entradas de inventario
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Pasillo
+                    </label>
+                    <input
+                      type="text"
+                      value={movementLocation.aisle}
+                      onChange={(e) =>
+                        setMovementLocation((prev) => ({ ...prev, aisle: e.target.value }))
+                      }
+                      placeholder="Ej: A1"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        errors.aisle ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    {errors.aisle && <p className="text-red-500 text-xs mt-1">{errors.aisle}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Estante
+                    </label>
+                    <input
+                      type="text"
+                      value={movementLocation.shelf}
+                      onChange={(e) =>
+                        setMovementLocation((prev) => ({ ...prev, shelf: e.target.value }))
+                      }
+                      placeholder="Ej: Nivel 3"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        errors.shelf ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    {errors.shelf && <p className="text-red-500 text-xs mt-1">{errors.shelf}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">
+                      Posición
+                    </label>
+                    <input
+                      type="text"
+                      value={movementLocation.bin}
+                      onChange={(e) =>
+                        setMovementLocation((prev) => ({ ...prev, bin: e.target.value }))
+                      }
+                      placeholder="Ej: B-07"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                        errors.bin ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    {errors.bin && <p className="text-red-500 text-xs mt-1">{errors.bin}</p>}
+                  </div>
+                </div>
+                {currentMovementItem && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Ubicación actual registrada: {[
+                      currentMovementItem.aisle,
+                      currentMovementItem.shelf,
+                      currentMovementItem.bin
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Sin detalles'}
+                  </p>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tipo de Movimiento <span className="text-red-500">*</span>
                 </label>
@@ -932,7 +1328,7 @@ export const AdminInventoryPage: React.FC = () => {
               <div className="flex gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => setShowMovementModal(false)}
+                  onClick={handleCloseMovementModal}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                 >
                   Cancelar

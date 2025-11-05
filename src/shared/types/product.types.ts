@@ -159,6 +159,8 @@ export interface Product extends BaseModel {
   // Stock e inventario
   total_stock: number;                    // Stock total en todas las ubicaciones
   stock_by_location?: { [key: string]: number }; // Stock por ubicación
+  minimum_stock?: number;                 // Límite mínimo recomendado (agregado)
+  maximum_stock?: number;                 // Límite máximo recomendado (agregado)
   in_stock: boolean;                      // ¿Hay stock disponible?
   needs_restock: boolean;                 // ¿Necesita reabastecimiento?
   
@@ -189,6 +191,8 @@ export interface ProductSimple {
   };
   category_name?: string;
   total_stock: number;
+  minimum_stock?: number;
+  maximum_stock?: number;
   in_stock: boolean;
   needs_restock: boolean;
   active: boolean;
@@ -210,6 +214,8 @@ export interface ProductCreate {
   category: number;
   main_image?: File;
   additional_images?: ProductImageCreate[];
+  minimum_stock?: number;
+  maximum_stock?: number;
 }
 
 export interface ProductUpdate {
@@ -220,6 +226,8 @@ export interface ProductUpdate {
   category?: number;
   main_image?: File | null;
   additional_images?: ProductImageCreate[];
+  minimum_stock?: number;
+  maximum_stock?: number;
 }
 
 // ========================================

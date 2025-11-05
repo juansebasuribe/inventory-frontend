@@ -166,6 +166,27 @@ class FilterHelper {
 // ========================================
 
 class DataTransformer {
+  private static toNumber(value: unknown): number | undefined {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  private static pickStockValue(product: any, ...keys: string[]): number | undefined {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(product, key)) {
+        const numeric = this.toNumber(product[key]);
+        if (numeric !== undefined) {
+          return numeric;
+        }
+      }
+    }
+    return undefined;
+  }
+
   /**
    * Transforma datos de creación para el API
    */
@@ -182,6 +203,14 @@ class DataTransformer {
     // Campos opcionales
     if (data.description) {
       formData.append('description', data.description);
+    }
+
+    if (typeof data.minimum_stock === 'number' && !Number.isNaN(data.minimum_stock)) {
+      formData.append('minimum_stock', data.minimum_stock.toString());
+    }
+
+    if (typeof data.maximum_stock === 'number' && !Number.isNaN(data.maximum_stock)) {
+      formData.append('maximum_stock', data.maximum_stock.toString());
     }
 
     // Imagen principal
@@ -223,6 +252,14 @@ class DataTransformer {
       formData.append('category', data.category.toString());
     }
 
+    if (data.minimum_stock !== undefined && !Number.isNaN(data.minimum_stock)) {
+      formData.append('minimum_stock', data.minimum_stock.toString());
+    }
+
+    if (data.maximum_stock !== undefined && !Number.isNaN(data.maximum_stock)) {
+      formData.append('maximum_stock', data.maximum_stock.toString());
+    }
+
     // Manejo especial para imagen principal
     // IMPORTANTE: Solo enviar si es un archivo nuevo válido
     if (data.main_image instanceof File) {
@@ -260,6 +297,9 @@ class DataTransformer {
    * Transforma respuesta del API para consistencia
    */
   static transformProductResponse(product: any): Product {
+    const minimumStock = this.pickStockValue(product, 'minimum_stock', 'min_quantity', 'min_stock');
+    const maximumStock = this.pickStockValue(product, 'maximum_stock', 'max_quantity', 'max_stock');
+
     return {
       ...product,
       // Asegurar que arrays existan
@@ -270,6 +310,8 @@ class DataTransformer {
       current_price: Number(product.current_price),
       cost_price: Number(product.cost_price),
       total_stock: Number(product.total_stock),
+      minimum_stock: minimumStock,
+      maximum_stock: maximumStock,
       // Asegurar booleans
       in_stock: Boolean(product.in_stock),
       needs_restock: Boolean(product.needs_restock),

@@ -99,14 +99,11 @@ export const StockExitModal: React.FC<StockExitModalProps> = ({
     setLoading(true);
 
     try {
-      // Crear movimiento de salida usando el endpoint correcto
-      // El warehouse_id se envía como to_location_code (aunque es desde_donde en una salida)
-      // El backend sabe interpretar según el movement_type
       await inventoryService.createMovement({
         movement_type: "exit",
         product_barcode: formData.product_code,
         quantity: formData.quantity,
-        to_location_code: String(formData.warehouse_id), // Para EXIT, va como to_location_code
+        from_location_code: String(formData.warehouse_id),
         reference_number: formData.reason,
         notes: formData.notes,
       });

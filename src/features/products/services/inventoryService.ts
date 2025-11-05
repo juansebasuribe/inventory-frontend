@@ -26,15 +26,23 @@ interface BackendInventoryItem {
     id: number;
     name: string;
     code: string;
+    aisle?: string | null;
+    aisle_code?: string | null;
+    shelf?: string | null;
+    shelf_code?: string | null;
+    bin?: string | null;
+    bin_code?: string | null;
   };
-  quantity: number;
-  min_quantity: number;
-  max_quantity: number;
-  aisle: string;
-  shelf: string;
-  bin: string;
-  needs_restock: boolean;
-  overstock: boolean;
+  quantity: number | string | null;
+  min_quantity?: number | string | null;
+  max_quantity?: number | string | null;
+  minimum_stock?: number | string | null;
+  maximum_stock?: number | string | null;
+  aisle?: string | null;
+  shelf?: string | null;
+  bin?: string | null;
+  needs_restock?: boolean;
+  overstock?: boolean;
   last_restocked: string | null;
   creation_date: string;
   update_date: string;
@@ -199,27 +207,76 @@ const INVENTORY_ENDPOINTS = {
 /**
  * Transforma la respuesta del backend al formato esperado por la UI
  */
+function toNumber(value: unknown, defaultValue = 0): number {
+  if (value === null || value === undefined) {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
+function pickFirstString(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
 function transformBackendItem(backendItem: BackendInventoryItem): InventoryItem {
+  const locationDetails: BackendInventoryItem['location_details'] =
+    backendItem.location_details ?? { id: 0, name: '', code: '' };
+
+  const currentStock = toNumber(backendItem.quantity);
+  const minimumStock = toNumber(
+    backendItem.min_quantity ?? backendItem.minimum_stock,
+    0
+  );
+  const maximumStock = toNumber(
+    backendItem.max_quantity ?? backendItem.maximum_stock,
+    0
+  );
+
+  const aisle = pickFirstString(
+    backendItem.aisle,
+    locationDetails?.aisle,
+    locationDetails?.aisle_code
+  );
+
+  const shelf = pickFirstString(
+    backendItem.shelf,
+    locationDetails?.shelf,
+    locationDetails?.shelf_code
+  );
+
+  const bin = pickFirstString(
+    backendItem.bin,
+    locationDetails?.bin,
+    locationDetails?.bin_code
+  );
+
   return {
     id: backendItem.id,
     product_code: backendItem.product_details?.bar_code || '',
     product_name: backendItem.product_details?.name || 'Sin nombre',
-    warehouse_code: backendItem.location_details?.code || '',
-    warehouse_name: backendItem.location_details?.name || 'Sin ubicación',
-    current_stock: backendItem.quantity || 0,
-    minimum_stock: backendItem.min_quantity || 0,
-    maximum_stock: backendItem.max_quantity || 0,
+    warehouse_code: locationDetails?.code || '',
+    warehouse_name: locationDetails?.name || 'Sin ubicación',
+    current_stock: currentStock,
+    minimum_stock: minimumStock,
+    maximum_stock: maximumStock,
     reserved_stock: 0, // No disponible en backend
-    available_stock: backendItem.quantity || 0,
-    unit_cost: backendItem.product_details?.retail_price || 0,
-    total_value: (backendItem.quantity || 0) * (backendItem.product_details?.retail_price || 0),
+    available_stock: currentStock,
+    unit_cost: toNumber(backendItem.product_details?.retail_price),
+    total_value: currentStock * toNumber(backendItem.product_details?.retail_price),
     last_movement_date: backendItem.last_restocked || backendItem.update_date,
     creation_date: backendItem.creation_date,
     update_date: backendItem.update_date,
     // Campos adicionales
-    aisle: backendItem.aisle,
-    shelf: backendItem.shelf,
-    bin: backendItem.bin,
+    aisle,
+    shelf,
+    bin,
     needs_restock: backendItem.needs_restock,
     overstock: backendItem.overstock,
   };
@@ -343,6 +400,9 @@ export class InventoryService {
     from_location_code?: string;
     reference_number?: string;
     notes?: string;
+    aisle?: string;
+    shelf?: string;
+    bin?: string;
   }): Promise<InventoryMovement> {
     try {
       return await apiClient.post<InventoryMovement>(
