@@ -1,9 +1,5 @@
 // src/features/products/constants/index.ts
 
-/**
- * Constantes para el módulo de productos
- */
-
 // ========================================
 // URLs DE API
 // ========================================

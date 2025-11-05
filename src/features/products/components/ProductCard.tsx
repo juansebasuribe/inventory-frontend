@@ -1,11 +1,5 @@
 // src/features/products/components/ProductCard.tsx
 
-/**
- * Componente ProductCard - Tarjeta de producto profesional
- * Integración completa con ProductService y ImageService
- * FASE 7.3 - Componentes UI Profesionales
- */
-
 import React, { useState } from 'react';
 import type { Product } from '../../../shared/types/product.types';
 import { getProductImageUrl } from '../../../shared/utils/url.utils';

@@ -1,10 +1,5 @@
 // src/features/products/components/ProductDetail.tsx
 
-/**
- * Componente ProductDetail - Vista detallada de un producto
- * Integración completa con ProductService
- * FASE 7.3 - Componentes UI Profesionales
- */
 
 import React, { useState, useEffect } from 'react';
 import { productService } from '../services/productService';

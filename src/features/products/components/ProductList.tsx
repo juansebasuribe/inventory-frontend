@@ -1,10 +1,5 @@
 // src/features/products/components/ProductList.tsx
 
-/**
- * Componente ProductList - Lista de productos con filtros y paginación
- * Integración completa con ProductService
- * FASE 7.3 - Componentes UI Profesionales
- */
 
 import React, { useState, useEffect } from 'react';
 import { productService } from '../services/productService';

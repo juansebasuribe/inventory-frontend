@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import ReactDOM from "react-dom";
+import { ApiClientError, ValidationError } from "../../../shared/services/api/apiClient";
 import {
   X,
   Package,
@@ -38,6 +39,12 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
 }) => {
   const _instanceId = React.useRef(Math.random().toString(36).slice(2, 9));
   const isMountedRef = useRef(true);
+  const modalContainerRef = useRef<HTMLDivElement | null>(null);
+
+  if (!modalContainerRef.current && typeof document !== "undefined") {
+    modalContainerRef.current = document.createElement("div");
+    modalContainerRef.current.setAttribute("data-modal-root", "product-edit-modal");
+  }
 
   React.useEffect(() => {
     if (isOpen) {
@@ -74,6 +81,29 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
   const [mainImage, setMainImage] = useState<File | null>(null);
   const [mainImagePreview, setMainImagePreview] = useState("");
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const getValidationMessage = (details?: Record<string, unknown>): string | null => {
+    if (!details) return null;
+
+    const [firstKey] = Object.keys(details);
+    if (!firstKey) return null;
+
+    const value = details[firstKey];
+
+    if (Array.isArray(value) && value.length > 0) {
+      return `${firstKey}: ${String(value[0])}`;
+    }
+
+    if (typeof value === "string") {
+      return `${firstKey}: ${value}`;
+    }
+
+    if (value && typeof value === "object") {
+      return `${firstKey}: ${JSON.stringify(value)}`;
+    }
+
+    return JSON.stringify(details);
+  };
 
   // Cargar categorías
   useEffect(() => {
@@ -259,282 +289,311 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
 
       console.log("✅ Producto actualizado exitosamente");
       
-      // Verificar si el componente sigue montado antes de actualizar estado
-      if (!isMountedRef.current) {
-        console.log("⚠️ Componente desmontado, cancelando actualización de estado");
-        return;
+      // Aplicar estado primero
+      if (isMountedRef.current) {
+        setLoading(false);
       }
       
-      setLoading(false);
-      onProductUpdated(updatedProduct);
+      // Cerrar modal después de que React aplique el estado
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          onProductUpdated(updatedProduct);
+        }
+      }, 0);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Error al actualizar:", error);
 
-      // Verificar si el componente sigue montado antes de actualizar estado
-      if (!isMountedRef.current) {
-        console.log("⚠️ Componente desmontado, cancelando actualización de error");
-        return;
+      // Aplicar estado de error primero
+      if (isMountedRef.current) {
+        let errorMessage = "Error al actualizar el producto";
+
+        if (error instanceof ValidationError) {
+          console.error("📋 Validation details:", error.details);
+          const detailsMessage = getValidationMessage(error.details);
+          errorMessage = detailsMessage || error.message || errorMessage;
+        } else if (error instanceof ApiClientError) {
+          errorMessage = error.message || errorMessage;
+        } else if (error instanceof Error) {
+          errorMessage = error.message || errorMessage;
+        }
+
+        setErrors({ general: errorMessage });
+        setLoading(false);
       }
-
-      const errorMessage =
-        error.response?.data?.detail ||
-        error.message ||
-        "Error al actualizar el producto";
-
-      setErrors({ general: errorMessage });
-      setLoading(false);
     }
   };
 
-  if (!isOpen || !product) return null;
+  useLayoutEffect(() => {
+    const container = modalContainerRef.current;
+    if (!container || typeof document === "undefined") {
+      return;
+    }
 
-  const modalContent = (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+    if (isOpen && !document.body.contains(container)) {
+      document.body.appendChild(container);
+    }
+
+    if (!isOpen && container.parentNode) {
+      container.parentNode.removeChild(container);
+    }
+
+    return () => {
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !product) {
+    return null;
+  }
+
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Editar Producto</h2>
+            <p className="text-gray-600 text-sm mt-1">{product.bar_code}</p>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        {/* Error general */}
+        {errors.general && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-600 text-sm font-medium">{errors.general}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Información básica */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <Package className="w-5 h-5 mr-2" />
+              Información
+            </h3>
+
+            {/* Nombre */}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Editar Producto</h2>
-              <p className="text-gray-600 text-sm mt-1">{product.bar_code}</p>
-            </div>
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Error general */}
-          {errors.general && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm font-medium">{errors.general}</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Información básica */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <Package className="w-5 h-5 mr-2" />
-                Información
-              </h3>
-
-              {/* Nombre */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre del Producto *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                    errors.name ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="Nombre del producto"
-                  disabled={loading}
-                />
-                {errors.name && (
-                  <p className="text-red-500 text-xs mt-1">{errors.name}</p>
-                )}
-              </div>
-
-              {/* Descripción */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descripción
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition disabled:opacity-50"
-                  placeholder="Descripción del producto..."
-                  disabled={loading}
-                />
-              </div>
-
-              {/* Categoría */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Categoría *
-                </label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                    errors.category ? "border-red-500" : "border-gray-300"
-                  }`}
-                  disabled={loading}
-                >
-                  <option value="">Seleccionar categoría</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-                {errors.category && (
-                  <p className="text-red-500 text-xs mt-1">{errors.category}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Precios e imagen */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                <DollarSign className="w-5 h-5 mr-2" />
-                Precios e Imagen
-              </h3>
-
-              {/* Precio de venta */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Precio de Venta *
-                </label>
-                <input
-                  type="number"
-                  name="retail_price"
-                  value={formData.retail_price}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                    errors.retail_price ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="0.00"
-                  disabled={loading}
-                />
-                {errors.retail_price && (
-                  <p className="text-red-500 text-xs mt-1">{errors.retail_price}</p>
-                )}
-              </div>
-
-              {/* Precio de costo */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Precio de Costo *
-                </label>
-                <input
-                  type="number"
-                  name="cost_price"
-                  value={formData.cost_price}
-                  onChange={handleInputChange}
-                  min="0"
-                  step="0.01"
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                    errors.cost_price ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="0.00"
-                  disabled={loading}
-                />
-                {errors.cost_price && (
-                  <p className="text-red-500 text-xs mt-1">{errors.cost_price}</p>
-                )}
-              </div>
-
-              {/* Imagen principal */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Imagen Principal
-                </label>
-
-                {currentMainImage && !mainImagePreview && (
-                  <div className="mb-3">
-                    <img
-                      src={currentMainImage}
-                      alt="Imagen actual"
-                      className="w-32 h-32 object-cover rounded-lg border border-gray-300"
-                    />
-                  </div>
-                )}
-
-                {mainImagePreview && (
-                  <div className="mb-3">
-                    <img
-                      src={mainImagePreview}
-                      alt="Nueva imagen"
-                      className="w-32 h-32 object-cover rounded-lg border-2 border-green-500"
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <label className="flex-1 px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 transition text-center disabled:opacity-50">
-                    <Upload className="w-4 h-4 inline mr-2" />
-                    <span className="text-sm">Cambiar imagen</span>
-                    <input
-                      type="file"
-                      id="main-image-input"
-                      ref={fileInputRef}
-                      accept="image/*"
-                      onChange={handleMainImageChange}
-                      className="hidden"
-                      disabled={loading}
-                    />
-                  </label>
-
-                  {mainImage && (
-                    <button
-                      type="button"
-                      onClick={removeMainImage}
-                      className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
-                      disabled={loading}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {errors.main_image && (
-                  <p className="text-red-500 text-xs mt-2">{errors.main_image}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-              disabled={loading}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center justify-center"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Guardar Cambios
-                </>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nombre del Producto *
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                  errors.name ? "border-red-500" : "border-gray-300"
+                }`}
+                placeholder="Nombre del producto"
+                disabled={loading}
+              />
+              {errors.name && (
+                <p className="text-red-500 text-xs mt-1">{errors.name}</p>
               )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+            </div>
 
-  return ReactDOM.createPortal(modalContent, document.body);
+            {/* Descripción */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Descripción
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition disabled:opacity-50"
+                placeholder="Descripción del producto..."
+                disabled={loading}
+              />
+            </div>
+
+            {/* Categoría */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Categoría *
+              </label>
+              <select
+                name="category"
+                value={formData.category}
+                onChange={handleInputChange}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                  errors.category ? "border-red-500" : "border-gray-300"
+                }`}
+                disabled={loading}
+              >
+                <option value="">Seleccionar categoría</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              {errors.category && (
+                <p className="text-red-500 text-xs mt-1">{errors.category}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Precios e imagen */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+              <DollarSign className="w-5 h-5 mr-2" />
+              Precios e Imagen
+            </h3>
+
+            {/* Precio de venta */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Precio de Venta *
+              </label>
+              <input
+                type="number"
+                name="retail_price"
+                value={formData.retail_price}
+                onChange={handleInputChange}
+                min="0"
+                step="0.01"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                  errors.retail_price ? "border-red-500" : "border-gray-300"
+                }`}
+                placeholder="0.00"
+                disabled={loading}
+              />
+              {errors.retail_price && (
+                <p className="text-red-500 text-xs mt-1">{errors.retail_price}</p>
+              )}
+            </div>
+
+            {/* Precio de costo */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Precio de Costo *
+              </label>
+              <input
+                type="number"
+                name="cost_price"
+                value={formData.cost_price}
+                onChange={handleInputChange}
+                min="0"
+                step="0.01"
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                  errors.cost_price ? "border-red-500" : "border-gray-300"
+                }`}
+                placeholder="0.00"
+                disabled={loading}
+              />
+              {errors.cost_price && (
+                <p className="text-red-500 text-xs mt-1">{errors.cost_price}</p>
+              )}
+            </div>
+
+            {/* Imagen principal */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Imagen Principal
+              </label>
+
+              {currentMainImage && !mainImagePreview && (
+                <div className="mb-3">
+                  <img
+                    src={currentMainImage}
+                    alt="Imagen actual"
+                    className="w-32 h-32 object-cover rounded-lg border border-gray-300"
+                  />
+                </div>
+              )}
+
+              {mainImagePreview && (
+                <div className="mb-3">
+                  <img
+                    src={mainImagePreview}
+                    alt="Nueva imagen"
+                    className="w-32 h-32 object-cover rounded-lg border-2 border-green-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <label className="flex-1 px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-green-500 transition text-center disabled:opacity-50">
+                  <Upload className="w-4 h-4 inline mr-2" />
+                  <span className="text-sm">Cambiar imagen</span>
+                  <input
+                    type="file"
+                    id="main-image-input"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleMainImageChange}
+                    className="hidden"
+                    disabled={loading}
+                  />
+                </label>
+
+                {mainImage && (
+                  <button
+                    type="button"
+                    onClick={removeMainImage}
+                    className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition disabled:opacity-50"
+                    disabled={loading}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {errors.main_image && (
+                <p className="text-red-500 text-xs mt-2">{errors.main_image}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+            disabled={loading}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center justify-center"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Guardar Cambios
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>,
+  modalContainerRef.current!
+  );
 };
 
 export default ProductEditModal;

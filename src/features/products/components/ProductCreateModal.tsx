@@ -1,9 +1,5 @@
 // src/features/products/components/ProductCreateModal.tsx
 
-/**
- * Modal para crear nuevos productos
- * Conectado al backend con validación completa
- */
 
 import React, { useState, useEffect } from 'react';
 import { X, Package, DollarSign, Hash, FileText, Tag, Upload, Image, Trash2 } from 'lucide-react';

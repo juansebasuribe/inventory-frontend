@@ -389,12 +389,7 @@ export class ProductService {
       console.log('📡 Enviando POST a:', PRODUCT_API_ENDPOINTS.PRODUCTS);
       const response = await apiClient.post<ProductCreateResponse>(
         PRODUCT_API_ENDPOINTS.PRODUCTS,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
+        formData
       );
 
       console.log('✅ Producto creado en backend:', response);
@@ -457,12 +452,7 @@ export class ProductService {
 
       const response = await apiClient.patch<ProductUpdateResponse>(
         PRODUCT_API_ENDPOINTS.PRODUCT_DETAIL_BY_CODE(barCode),
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
+        formData
       );
 
       const updatedProduct = DataTransformer.transformProductResponse(response);
@@ -477,16 +467,14 @@ export class ProductService {
       }
 
       return updatedProduct;
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Error al actualizar producto:', error);
 
-      // Mejorar mensaje de error
-      const errorMessage = error.response?.data?.detail ||
-                          error.response?.data?.message ||
-                          error.message ||
-                          'Error al actualizar el producto';
+      if (error instanceof Error) {
+        throw error;
+      }
 
-      throw new Error(errorMessage);
+      throw new Error('Error al actualizar el producto');
     }
   }
 

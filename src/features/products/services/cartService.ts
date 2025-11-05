@@ -1,9 +1,5 @@
 // src/features/products/services/cartService.ts
 
-/**
- * Servicio para gestión del carrito de compras
- * Maneja items del carrito, cálculos y operaciones CRUD
- */
 
 import { apiClient } from '../../../shared/services';
 

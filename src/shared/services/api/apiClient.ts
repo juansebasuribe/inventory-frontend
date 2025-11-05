@@ -102,6 +102,15 @@ export class ApiClient {
     // Request interceptor for auth tokens
     this.axiosInstance.interceptors.request.use(
       (config) => {
+        config.headers = config.headers ?? {};
+
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+          if (config.headers) {
+            delete (config.headers as Record<string, unknown>)['Content-Type'];
+            delete (config.headers as Record<string, unknown>)['content-type'];
+          }
+        }
+
         if (this.authTokens?.access) {
           config.headers.Authorization = `JWT ${this.authTokens.access}`;
           if (import.meta.env.DEV) {
@@ -167,10 +176,22 @@ export class ApiClient {
 
     switch (status) {
       case 400:
+        {
+          const detailPayload =
+            (errorData && typeof errorData === 'object' && 'detail' in errorData)
+              ? { detail: (errorData as Record<string, unknown>).detail }
+              : undefined;
+          const validationDetails =
+            (errorData && typeof errorData === 'object' && 'errors' in errorData)
+              ? (errorData as Record<string, unknown>).errors as Record<string, any>
+              : (detailPayload as Record<string, any> | undefined) || (errorData as Record<string, any> | undefined);
         return new ValidationError(
-          errorData.message || 'Invalid request data',
-          errorData.errors
+          (errorData && errorData.message) ||
+            (detailPayload && detailPayload.detail as string) ||
+            'Invalid request data',
+          validationDetails
         );
+        }
       case 401:
         return new AuthenticationError(
           errorData.message || 'Authentication required'
@@ -410,8 +431,7 @@ const apiConfig: ApiClientConfig = {
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
   timeout: 30000,
   defaultHeaders: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   },
 };
 

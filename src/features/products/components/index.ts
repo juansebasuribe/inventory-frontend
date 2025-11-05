@@ -1,10 +1,5 @@
 // src/features/products/components/index.ts
 
-/**
- * Exportaciones de componentes de productos
- * FASE 7.3 - Componentes UI Profesionales
- */
-
 export { ProductCard } from './ProductCard';
 export { ProductList } from './ProductList';
 export { ProductDetail } from './ProductDetail';
