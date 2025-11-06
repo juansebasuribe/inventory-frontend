@@ -157,10 +157,20 @@ export interface Product extends BaseModel {
   primary_cost_price?: number;            // Precio del proveedor principal
   
   // Stock e inventario
+  // NOTA: Los valores min/max stock están en InventoryItem (por ubicación), 
+  // no directamente en Product. Ver stock_by_location para detalles por ubicación.
   total_stock: number;                    // Stock total en todas las ubicaciones
-  stock_by_location?: { [key: string]: number }; // Stock por ubicación
-  minimum_stock?: number;                 // Límite mínimo recomendado (agregado)
-  maximum_stock?: number;                 // Límite máximo recomendado (agregado)
+  stock_by_location?: {                   // Stock detallado por ubicación (código)
+    [locationCode: string]: {
+      location_name: string;              // Nombre de la ubicación
+      quantity: number;                   // Cantidad en esta ubicación
+      min_quantity: number;               // Stock mínimo en esta ubicación
+      max_quantity: number;               // Stock máximo en esta ubicación
+      aisle?: string;                     // Pasillo (ej: "A1")
+      shelf?: string;                     // Estante (ej: "E2")
+      bin?: string;                       // Contenedor (ej: "C3")
+    };
+  };
   in_stock: boolean;                      // ¿Hay stock disponible?
   needs_restock: boolean;                 // ¿Necesita reabastecimiento?
   
@@ -191,8 +201,17 @@ export interface ProductSimple {
   };
   category_name?: string;
   total_stock: number;
-  minimum_stock?: number;
-  maximum_stock?: number;
+  stock_by_location?: {
+    [locationCode: string]: {
+      location_name: string;
+      quantity: number;
+      min_quantity: number;
+      max_quantity: number;
+      aisle?: string;
+      shelf?: string;
+      bin?: string;
+    };
+  };
   in_stock: boolean;
   needs_restock: boolean;
   active: boolean;
@@ -214,8 +233,8 @@ export interface ProductCreate {
   category: number;
   main_image?: File;
   additional_images?: ProductImageCreate[];
-  minimum_stock?: number;
-  maximum_stock?: number;
+  // NOTA: minimum_stock y maximum_stock NO se envían aquí
+  // Se configuran en InventoryItem al agregar el producto a una ubicación
 }
 
 export interface ProductUpdate {
@@ -226,8 +245,8 @@ export interface ProductUpdate {
   category?: number;
   main_image?: File | null;
   additional_images?: ProductImageCreate[];
-  minimum_stock?: number;
-  maximum_stock?: number;
+  // NOTA: minimum_stock y maximum_stock NO se envían aquí
+  // Se configuran en InventoryItem al agregar el producto a una ubicación
 }
 
 // ========================================

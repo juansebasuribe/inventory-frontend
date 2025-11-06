@@ -17,6 +17,7 @@ import type {
   ProductProviderCreate
 } from '../../../shared/types/product.types';
 import { apiClient } from '../../../shared/services';
+import { ApiClientError } from '../../../shared/services/api/apiClient';
 import { PRODUCT_API_ENDPOINTS, PAGINATION_CONFIG, FILTER_CONFIG } from '../constants';
 import { imageService } from './imageService';
 
@@ -205,13 +206,8 @@ class DataTransformer {
       formData.append('description', data.description);
     }
 
-    if (typeof data.minimum_stock === 'number' && !Number.isNaN(data.minimum_stock)) {
-      formData.append('minimum_stock', data.minimum_stock.toString());
-    }
-
-    if (typeof data.maximum_stock === 'number' && !Number.isNaN(data.maximum_stock)) {
-      formData.append('maximum_stock', data.maximum_stock.toString());
-    }
+    // NOTA: minimum_stock y maximum_stock NO se envían al endpoint de productos.
+    // Estos campos pertenecen a InventoryItem y se configuran al agregar el producto a una ubicación.
 
     // Imagen principal
     if (data.main_image) {
@@ -252,13 +248,8 @@ class DataTransformer {
       formData.append('category', data.category.toString());
     }
 
-    if (data.minimum_stock !== undefined && !Number.isNaN(data.minimum_stock)) {
-      formData.append('minimum_stock', data.minimum_stock.toString());
-    }
-
-    if (data.maximum_stock !== undefined && !Number.isNaN(data.maximum_stock)) {
-      formData.append('maximum_stock', data.maximum_stock.toString());
-    }
+    // NOTA: minimum_stock y maximum_stock NO se envían al endpoint de productos.
+    // Estos campos pertenecen a InventoryItem y se configuran al agregar el producto a una ubicación.
 
     // Manejo especial para imagen principal
     // IMPORTANTE: Solo enviar si es un archivo nuevo válido

@@ -38,9 +38,7 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
     bar_code: '',
     retail_price: 0,
     cost_price: 0,
-    category: 1,
-    minimum_stock: 0,
-    maximum_stock: 0
+    category: 1
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -190,21 +188,7 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
       newErrors.cost_price = 'El costo no puede ser negativo';
     }
 
-    if (formData.minimum_stock !== undefined && formData.minimum_stock <= 0) {
-      newErrors.minimum_stock = 'El stock mínimo debe ser mayor a 0';
-    }
-
-    if (formData.maximum_stock !== undefined && formData.maximum_stock <= 0) {
-      newErrors.maximum_stock = 'El stock máximo debe ser mayor a 0';
-    }
-
-    if (
-      formData.minimum_stock !== undefined &&
-      formData.maximum_stock !== undefined &&
-      formData.maximum_stock < formData.minimum_stock
-    ) {
-      newErrors.maximum_stock = 'El stock máximo debe ser mayor o igual al mínimo';
-    }
+    // NOTA: minimum_stock y maximum_stock se configuran en InventoryItem, no aquí
 
     if (!formData.category) {
       newErrors.category = 'Debe seleccionar una categoría';
@@ -249,9 +233,7 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
           bar_code: '',
           retail_price: 0,
           cost_price: 0,
-          category: 1,
-          minimum_stock: 0,
-          maximum_stock: 0
+          category: 1
         });
         setErrors({});
         
@@ -399,48 +381,6 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
                 placeholder="0.00"
               />
               {errors.cost_price && <p className="text-red-500 text-xs mt-1">{errors.cost_price}</p>}
-            </div>
-
-            {/* Stock mínimo */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <ArrowUpDown className="w-4 h-4 inline mr-1" />
-                Stock Mínimo *
-              </label>
-              <input
-                type="number"
-                name="minimum_stock"
-                value={formData.minimum_stock}
-                onChange={handleInputChange}
-                min="0"
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors ${
-                  errors.minimum_stock ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                }`}
-                placeholder="Ej: 10"
-                required
-              />
-              {errors.minimum_stock && <p className="text-red-500 text-xs mt-1">{errors.minimum_stock}</p>}
-            </div>
-
-            {/* Stock máximo */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <ArrowUpDown className="w-4 h-4 inline mr-1" />
-                Stock Máximo *
-              </label>
-              <input
-                type="number"
-                name="maximum_stock"
-                value={formData.maximum_stock}
-                onChange={handleInputChange}
-                min="0"
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors ${
-                  errors.maximum_stock ? 'border-red-300 bg-red-50' : 'border-gray-300'
-                }`}
-                placeholder="Ej: 100"
-                required
-              />
-              {errors.maximum_stock && <p className="text-red-500 text-xs mt-1">{errors.maximum_stock}</p>}
             </div>
 
             {/* Categoría */}

@@ -5,7 +5,7 @@
 // ========================================
 
 export const PRODUCT_API_ENDPOINTS = {
-  // Productos
+  // Productos - Backend solo expone endpoint "simple"
   PRODUCTS: '/api/product/v1/products/simple/',
   PRODUCT_DETAIL_BY_CODE: (barCode: string) => `/api/product/v1/products/code/simple/${barCode}/`,
   PRODUCT_ACTIVATE: (barCode: string) => `/api/product/v1/products/${barCode}/activate/`,

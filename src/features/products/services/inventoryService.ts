@@ -375,6 +375,61 @@ export class InventoryService {
   }
 
   /**
+   * Actualiza un item de inventario (incluye min/max quantity)
+   */
+  async updateInventoryItem(id: number, updateData: {
+    product?: number;
+    location?: number;
+    quantity?: number;
+    min_quantity?: number;
+    max_quantity?: number;
+    aisle?: string;
+    shelf?: string;
+    bin?: string;
+  }): Promise<InventoryItem> {
+    try {
+      console.log(`[InventoryService] Actualizando item ${id}:`, updateData);
+      
+      // Primero obtener el item actual para tener todos los campos requeridos
+      const currentItem = await apiClient.get<BackendInventoryItem>(
+        INVENTORY_ENDPOINTS.ITEM_DETAIL(id)
+      );
+      console.log('[InventoryService] Item actual del backend:', currentItem);
+      
+      // Preparar datos completos para el PUT (el backend requiere todos los campos)
+      const fullUpdateData = {
+        product: updateData.product ?? currentItem.product,
+        location: updateData.location ?? currentItem.location,
+        quantity: updateData.quantity ?? currentItem.quantity ?? 0,
+        min_quantity: updateData.min_quantity ?? currentItem.min_quantity ?? null,
+        max_quantity: updateData.max_quantity ?? currentItem.max_quantity ?? null,
+        aisle: updateData.aisle ?? currentItem.aisle ?? null,
+        shelf: updateData.shelf ?? currentItem.shelf ?? null,
+        bin: updateData.bin ?? currentItem.bin ?? null,
+      };
+      
+      console.log('[InventoryService] Enviando datos completos:', fullUpdateData);
+      
+      // Usar PUT con datos completos
+      const response = await apiClient.put<BackendInventoryItem>(
+        INVENTORY_ENDPOINTS.ITEM_DETAIL(id),
+        fullUpdateData
+      );
+      
+      console.log('[InventoryService] Item actualizado (backend):', response);
+      
+      // Transformar respuesta del backend al formato de la UI
+      const transformedItem = transformBackendItem(response);
+      console.log('[InventoryService] Item transformado:', transformedItem);
+      
+      return transformedItem;
+    } catch (error) {
+      console.error('Error al actualizar item de inventario:', error);
+      throw new Error('Error al actualizar el item de inventario');
+    }
+  }
+
+  /**
    * Actualiza la cantidad de un item de inventario
    */
   async updateItemQuantity(id: number, updateData: StockUpdateData): Promise<InventoryItem> {
@@ -393,7 +448,7 @@ export class InventoryService {
    * Crea un movimiento de inventario (entrada, salida, transferencia)
    */
   async createMovement(data: {
-    movement_type: 'entry' | 'exit' | 'transfer' | 'adjustment';
+    movement_type: 'entry' | 'exit' | 'transfer' | 'adjustment';  // ⚠️ DEBE ser minúsculas
     product_barcode: string;
     quantity: number;
     to_location_code?: string;
@@ -405,13 +460,74 @@ export class InventoryService {
     bin?: string;
   }): Promise<InventoryMovement> {
     try {
-      return await apiClient.post<InventoryMovement>(
+      console.log('📤 [InventoryService] Creando movimiento:', data);
+      console.log('📤 [InventoryService] Tipos de datos:', {
+        movement_type: typeof data.movement_type,
+        product_barcode: typeof data.product_barcode,
+        quantity: typeof data.quantity,
+        to_location_code: typeof data.to_location_code,
+        from_location_code: typeof data.from_location_code
+      });
+      
+      const response = await apiClient.post<InventoryMovement>(
         INVENTORY_ENDPOINTS.MOVEMENTS,
         data
       );
-    } catch (error) {
-      console.error('Error al crear movimiento:', error);
-      throw new Error('Error al registrar el movimiento de inventario');
+      
+      console.log('✅ [InventoryService] Movimiento creado:', response);
+      return response;
+    } catch (error: any) {
+      console.error('❌ [InventoryService] Error al crear movimiento:', error);
+      console.error('❌ [InventoryService] Error name:', error?.name);
+      console.error('❌ [InventoryService] Error message:', error?.message);
+      console.error('❌ [InventoryService] Error details:', error?.details);
+      console.error('❌ [InventoryService] Error completo:', error);
+      
+      // Extraer mensaje de error
+      let errorMessage = 'Error al registrar el movimiento de inventario';
+      
+      // Si es ValidationError o ApiClientError, tiene la propiedad details
+      if (error.details) {
+        console.log('🔍 [InventoryService] Analizando error.details:', error.details);
+        
+        const details = error.details;
+        
+        if (typeof details === 'string') {
+          errorMessage = details;
+        } else if (details.detail) {
+          errorMessage = Array.isArray(details.detail) 
+            ? details.detail.join(', ') 
+            : String(details.detail);
+        } else if (details.error) {
+          errorMessage = String(details.error);
+        } else if (details.message) {
+          errorMessage = String(details.message);
+        } else if (details.non_field_errors) {
+          errorMessage = Array.isArray(details.non_field_errors) 
+            ? details.non_field_errors.join(', ') 
+            : String(details.non_field_errors);
+        } else {
+          // Si hay errores de campos específicos, construir mensaje
+          const fieldErrors = Object.entries(details)
+            .filter(([key]) => !['status', 'statusText'].includes(key))
+            .map(([key, value]) => {
+              if (Array.isArray(value)) {
+                return `${key}: ${value.join(', ')}`;
+              }
+              return `${key}: ${value}`;
+            });
+          
+          if (fieldErrors.length > 0) {
+            errorMessage = fieldErrors.join(' | ');
+          }
+        }
+      } else if (error.message) {
+        // Si no hay details, usar el mensaje del error
+        errorMessage = error.message;
+      }
+      
+      console.error('🔴 [InventoryService] Error final:', errorMessage);
+      throw new Error(errorMessage);
     }
   }
 

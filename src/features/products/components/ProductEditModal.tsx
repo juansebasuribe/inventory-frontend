@@ -51,8 +51,6 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     retail_price: 0,
     cost_price: 0,
     category: 1,
-    minimum_stock: 0,
-    maximum_stock: 0,
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -119,8 +117,6 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
         retail_price: product.retail_price,
         cost_price: product.cost_price,
         category: product.category,
-        minimum_stock: product.minimum_stock ?? 0,
-        maximum_stock: product.maximum_stock ?? 0,
       });
 
       if (product.main_image) {
@@ -237,21 +233,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
       newErrors.category = "Categoría requerida";
     }
 
-    if (formData.minimum_stock < 0) {
-      newErrors.minimum_stock = "El stock mínimo no puede ser negativo";
-    }
-
-    if (formData.maximum_stock < 0) {
-      newErrors.maximum_stock = "El stock máximo no puede ser negativo";
-    }
-
-    if (
-      formData.maximum_stock > 0 &&
-      formData.minimum_stock > 0 &&
-      formData.maximum_stock < formData.minimum_stock
-    ) {
-      newErrors.maximum_stock = "El stock máximo debe ser mayor o igual al mínimo";
-    }
+    // NOTA: minimum_stock y maximum_stock se configuran en InventoryItem, no aquí
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -290,12 +272,14 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
       
       if (isMountedRef.current) {
         setLoading(false);
-        // Primero cerrar el modal
-        onClose();
-        // Luego notificar al padre (después de que el modal esté cerrado)
+        // Notificar al padre ANTES de cerrar (para evitar conflictos DOM)
+        onProductUpdated(updatedProduct);
+        // Cerrar modal después de 200ms para dar tiempo a React
         setTimeout(() => {
-          onProductUpdated(updatedProduct);
-        }, 100);
+          if (isMountedRef.current) {
+            onClose();
+          }
+        }, 200);
       }
       
     } catch (error: unknown) {
@@ -423,56 +407,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
               )}
             </div>
 
-            {/* Límites de stock */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Stock Mínimo
-                </label>
-                <input
-                  type="number"
-                  name="minimum_stock"
-                  value={formData.minimum_stock}
-                  onChange={handleInputChange}
-                  min="0"
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                    errors.minimum_stock ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="Ej: 10"
-                  disabled={loading}
-                />
-                {errors.minimum_stock && (
-                  <p className="text-red-500 text-xs mt-1">{errors.minimum_stock}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Define el nivel al que se debe reordenar.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Stock Máximo
-                </label>
-                <input
-                  type="number"
-                  name="maximum_stock"
-                  value={formData.maximum_stock}
-                  onChange={handleInputChange}
-                  min="0"
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
-                    errors.maximum_stock ? "border-red-500" : "border-gray-300"
-                  }`}
-                  placeholder="Ej: 50"
-                  disabled={loading}
-                />
-                {errors.maximum_stock && (
-                  <p className="text-red-500 text-xs mt-1">{errors.maximum_stock}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Límite superior recomendado para stock disponible.
-                </p>
-              </div>
-            </div>
+            {/* NOTA: Los límites de stock (min/max) se configuran por ubicación en InventoryItem, no aquí */}
           </div>
 
           {/* Precios e imagen */}

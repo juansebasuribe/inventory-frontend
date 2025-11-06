@@ -17,6 +17,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Trash2,
   TrendingUp,
   Warehouse,
   X
@@ -48,8 +49,8 @@ interface InventoryItem {
   warehouse_code: string;
   warehouse_name: string;
   current_stock: number;
-  minimum_stock: number;
-  maximum_stock: number;
+  minimum_stock: number;  // min_quantity del backend
+  maximum_stock: number;  // max_quantity del backend
   aisle?: string;
   shelf?: string;
   bin?: string;
@@ -70,8 +71,8 @@ interface ProductWithStock {
   };
   main_image?: string | null;
   total_stock: number;
-  minimum_stock?: number;
-  maximum_stock?: number;
+  // NOTA: minimum_stock y maximum_stock NO existen a nivel de producto
+  // Se almacenan en InventoryItem por ubicación
   stock_by_location: InventoryItem[];
   needs_restock?: boolean;
 }
@@ -143,25 +144,63 @@ const toProductWithStock = (
       : undefined,
     main_image: product.main_image,
     total_stock: totalStock || product.total_stock || 0,
-    minimum_stock: product.minimum_stock,
-    maximum_stock: product.maximum_stock,
+    // NOTA: minimum_stock y maximum_stock están en cada ubicación (InventoryItem),
+    // no a nivel de producto
     stock_by_location: inventoryItems,
     needs_restock: needsRestock
   };
 };
 
 // ========================================
-// COMPONENTE: MODAL DE UBICACIONES
+// COMPONENTE: MODAL DE UBICACIONES CON EDICIÓN
 // ========================================
 
 interface LocationModalProps {
   isOpen: boolean;
   onClose: () => void;
   product: ProductWithStock;
+  onUpdateLocation?: (locationId: number, minStock: number, maxStock: number) => void;
 }
 
-const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, product }) => {
+const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, product, onUpdateLocation }) => {
+  const [editingLocation, setEditingLocation] = React.useState<number | null>(null);
+  const [editValues, setEditValues] = React.useState<{ min: number; max: number }>({ min: 0, max: 0 });
+  const [saving, setSaving] = React.useState(false);
+
   if (!isOpen) return null;
+
+  const startEdit = (location: InventoryItem) => {
+    setEditingLocation(location.id);
+    setEditValues({
+      min: location.minimum_stock || 0,
+      max: location.maximum_stock || 0,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingLocation(null);
+    setEditValues({ min: 0, max: 0 });
+  };
+
+  const saveEdit = async (locationId: number) => {
+    if (editValues.max < editValues.min) {
+      alert('El stock máximo debe ser mayor o igual al mínimo');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (onUpdateLocation) {
+        await onUpdateLocation(locationId, editValues.min, editValues.max);
+      }
+      setEditingLocation(null);
+    } catch (error) {
+      console.error('Error al actualizar límites:', error);
+      alert('Error al guardar los cambios');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -197,95 +236,155 @@ const LocationModal: React.FC<LocationModalProps> = ({ isOpen, onClose, product 
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {product.stock_by_location.map(location => (
-                <div
-                  key={location.id}
-                  className={`rounded-xl border p-5 transition-shadow hover:shadow-md ${
-                    location.needs_restock
-                      ? 'border-red-200 bg-red-50'
-                      : location.overstock
-                        ? 'border-amber-200 bg-amber-50'
-                        : 'border-gray-200 bg-white'
-                  }`}
-                >
-                  {/* Warehouse info */}
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${
-                        location.needs_restock
-                          ? 'bg-red-100'
-                          : location.overstock
-                            ? 'bg-amber-100'
-                            : 'bg-blue-100'
-                      }`}>
-                        <MapPin className={`h-6 w-6 ${
+              {product.stock_by_location.map(location => {
+                const isEditing = editingLocation === location.id;
+                
+                return (
+                  <div
+                    key={location.id}
+                    className={`rounded-xl border p-5 transition-shadow hover:shadow-md ${
+                      location.needs_restock
+                        ? 'border-red-200 bg-red-50'
+                        : location.overstock
+                          ? 'border-amber-200 bg-amber-50'
+                          : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    {/* Warehouse info */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${
                           location.needs_restock
-                            ? 'text-red-600'
+                            ? 'bg-red-100'
                             : location.overstock
-                              ? 'text-amber-600'
-                              : 'text-blue-600'
-                        }`} />
+                              ? 'bg-amber-100'
+                              : 'bg-blue-100'
+                        }`}>
+                          <MapPin className={`h-6 w-6 ${
+                            location.needs_restock
+                              ? 'text-red-600'
+                              : location.overstock
+                                ? 'text-amber-600'
+                                : 'text-blue-600'
+                          }`} />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{location.warehouse_name}</h3>
+                          <p className="text-sm text-gray-500">{location.warehouse_code}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {location.needs_restock && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                            <AlertTriangle className="h-3 w-3" />
+                            Reabastecer
+                          </span>
+                        )}
+                        {location.overstock && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                            <AlertTriangle className="h-3 w-3" />
+                            Sobrestock
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stock info - Editable */}
+                    <div className="mt-4 grid grid-cols-3 gap-3 border-t border-gray-200 pt-4">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Actual</p>
+                        <p className="mt-1 text-2xl font-bold text-gray-900">{location.current_stock}</p>
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">{location.warehouse_name}</h3>
-                        <p className="text-sm text-gray-500">{location.warehouse_code}</p>
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Mínimo</p>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={editValues.min}
+                            onChange={(e) => setEditValues({ ...editValues, min: parseInt(e.target.value) || 0 })}
+                            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm font-semibold"
+                            disabled={saving}
+                          />
+                        ) : (
+                          <p className="mt-1 text-xl font-semibold text-gray-700">
+                            {location.minimum_stock !== null && location.minimum_stock !== undefined ? location.minimum_stock : '-'}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Máximo</p>
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={editValues.max}
+                            onChange={(e) => setEditValues({ ...editValues, max: parseInt(e.target.value) || 0 })}
+                            className="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm font-semibold"
+                            disabled={saving}
+                          />
+                        ) : (
+                          <p className="mt-1 text-xl font-semibold text-gray-700">
+                            {location.maximum_stock !== null && location.maximum_stock !== undefined ? location.maximum_stock : '-'}
+                          </p>
+                        )}
                       </div>
                     </div>
-                    {location.needs_restock && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-                        <AlertTriangle className="h-3 w-3" />
-                        Reabastecer
-                      </span>
+
+                    {/* Botones de edición */}
+                    {isEditing ? (
+                      <div className="mt-4 flex gap-2 border-t border-gray-200 pt-4">
+                        <button
+                          onClick={() => saveEdit(location.id)}
+                          disabled={saving}
+                          className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {saving ? 'Guardando...' : 'Guardar'}
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          disabled={saving}
+                          className="flex-1 rounded-lg bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEdit(location)}
+                        className="mt-4 w-full rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                      >
+                        <Edit className="inline h-3 w-3 mr-1" />
+                        Editar límites
+                      </button>
                     )}
-                    {location.overstock && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                        <AlertTriangle className="h-3 w-3" />
-                        Sobrestock
-                      </span>
+
+                    {/* Location details */}
+                    {(location.aisle || location.shelf || location.bin) && (
+                      <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+                        {location.aisle && (
+                          <div className="rounded-lg bg-gray-100 px-3 py-1.5">
+                            <span className="text-xs font-medium text-gray-600">Pasillo:</span>
+                            <span className="ml-1 text-xs font-semibold text-gray-900">{location.aisle}</span>
+                          </div>
+                        )}
+                        {location.shelf && (
+                          <div className="rounded-lg bg-gray-100 px-3 py-1.5">
+                            <span className="text-xs font-medium text-gray-600">Estante:</span>
+                            <span className="ml-1 text-xs font-semibold text-gray-900">{location.shelf}</span>
+                          </div>
+                        )}
+                        {location.bin && (
+                          <div className="rounded-lg bg-gray-100 px-3 py-1.5">
+                            <span className="text-xs font-medium text-gray-600">Contenedor:</span>
+                            <span className="ml-1 text-xs font-semibold text-gray-900">{location.bin}</span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-
-                  {/* Stock info */}
-                  <div className="mt-4 grid grid-cols-3 gap-3 border-t border-gray-200 pt-4">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Actual</p>
-                      <p className="mt-1 text-2xl font-bold text-gray-900">{location.current_stock}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Mínimo</p>
-                      <p className="mt-1 text-xl font-semibold text-gray-700">{location.minimum_stock || '-'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Máximo</p>
-                      <p className="mt-1 text-xl font-semibold text-gray-700">{location.maximum_stock || '-'}</p>
-                    </div>
-                  </div>
-
-                  {/* Location details */}
-                  {(location.aisle || location.shelf || location.bin) && (
-                    <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
-                      {location.aisle && (
-                        <div className="rounded-lg bg-gray-100 px-3 py-1.5">
-                          <span className="text-xs font-medium text-gray-600">Pasillo:</span>
-                          <span className="ml-1 text-xs font-semibold text-gray-900">{location.aisle}</span>
-                        </div>
-                      )}
-                      {location.shelf && (
-                        <div className="rounded-lg bg-gray-100 px-3 py-1.5">
-                          <span className="text-xs font-medium text-gray-600">Estante:</span>
-                          <span className="ml-1 text-xs font-semibold text-gray-900">{location.shelf}</span>
-                        </div>
-                      )}
-                      {location.bin && (
-                        <div className="rounded-lg bg-gray-100 px-3 py-1.5">
-                          <span className="text-xs font-medium text-gray-600">Ubicación:</span>
-                          <span className="ml-1 text-xs font-semibold text-gray-900">{location.bin}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -336,6 +435,7 @@ export const AdminProductsPage: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithStock | null>(null);
+  const [isModalTransitioning, setIsModalTransitioning] = useState(false);
 
   // Estadísticas
   const [stats, setStats] = useState({
@@ -354,6 +454,7 @@ export const AdminProductsPage: React.FC = () => {
     try {
       const [categoryResponse, productsResponse, inventoryResponse] = await Promise.all([
         categoryService.getCategories(),
+        // Backend solo expone /simple/ para productos
         productService.getProducts({ page_size: 500, ordering: 'name' }),
         inventoryService.getInventoryItems({ page_size: 1000 }).catch(() => ({ results: [] }))
       ]);
@@ -455,20 +556,130 @@ export const AdminProductsPage: React.FC = () => {
   }, []);
 
   const handleEditProduct = useCallback((product: ProductWithStock) => {
+    if (isModalTransitioning) return;
+    
+    setIsModalTransitioning(true);
     setSelectedProduct(product);
-    setShowEditModal(true);
-  }, []);
+    
+    setTimeout(() => {
+      setShowEditModal(true);
+      setIsModalTransitioning(false);
+    }, 100);
+  }, [isModalTransitioning]);
 
   const handleViewLocations = useCallback((product: ProductWithStock) => {
+    if (isModalTransitioning) return;
+    
+    setIsModalTransitioning(true);
     setSelectedProduct(product);
-    setShowLocationModal(true);
-  }, []);
+    
+    setTimeout(() => {
+      setShowLocationModal(true);
+      setIsModalTransitioning(false);
+    }, 100);
+  }, [isModalTransitioning]);
+
+  const handleUpdateLocation = useCallback(async (locationId: number, minStock: number, maxStock: number) => {
+    try {
+      // Actualizar el item de inventario usando el servicio
+      const response = await inventoryService.updateInventoryItem(locationId, {
+        min_quantity: minStock,
+        max_quantity: maxStock,
+      });
+
+      console.log('Límites de stock actualizados:', response);
+
+      // Recargar los datos para reflejar los cambios
+      await loadData();
+
+      return response;
+    } catch (error) {
+      console.error('Error al actualizar límites de stock:', error);
+      throw error;
+    }
+  }, [loadData]);
+
+  const handleOpenCreateModal = useCallback(() => {
+    if (isModalTransitioning) return;
+    
+    setIsModalTransitioning(true);
+    
+    setTimeout(() => {
+      setShowCreateModal(true);
+      setIsModalTransitioning(false);
+    }, 100);
+  }, [isModalTransitioning]);
 
   const handleProductSaved = useCallback(() => {
+    // Inmediatamente recargar datos y limpiar estado
+    void loadData();
     setShowCreateModal(false);
     setShowEditModal(false);
     setSelectedProduct(null);
-    void loadData();
+    setIsModalTransitioning(false);
+  }, [loadData]);
+
+  const handleCloseCreateModal = useCallback(() => {
+    setIsModalTransitioning(true);
+    setShowCreateModal(false);
+    
+    setTimeout(() => {
+      setIsModalTransitioning(false);
+    }, 300);
+  }, []);
+
+  const handleCloseEditModal = useCallback(() => {
+    setIsModalTransitioning(true);
+    setShowEditModal(false);
+    
+    setTimeout(() => {
+      setSelectedProduct(null);
+      setIsModalTransitioning(false);
+    }, 300);
+  }, []);
+
+  const handleCloseLocationModal = useCallback(() => {
+    setIsModalTransitioning(true);
+    setShowLocationModal(false);
+    
+    setTimeout(() => {
+      setSelectedProduct(null);
+      setIsModalTransitioning(false);
+    }, 300);
+  }, []);
+
+  const handleDeleteProduct = useCallback(async (product: ProductWithStock) => {
+    // Verificar que el producto no tenga stock
+    if ((product.total_stock || 0) > 0) {
+      alert('No se puede eliminar un producto con stock. Primero debe mover o eliminar el inventario.');
+      return;
+    }
+
+    // Confirmar eliminación
+    const confirmed = window.confirm(
+      `¿Está seguro de eliminar el producto "${product.name}"?\n\nCódigo: ${product.bar_code}\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      
+      // Llamar al servicio para eliminar el producto (usa bar_code)
+      await productService.deleteProduct(product.bar_code);
+      
+      console.log(`Producto ${product.bar_code} eliminado exitosamente`);
+      
+      // Recargar los datos
+      await loadData();
+      
+      alert('Producto eliminado exitosamente');
+    } catch (error) {
+      console.error('Error al eliminar producto:', error);
+      alert('Error al eliminar el producto. Por favor, intente nuevamente.');
+    } finally {
+      setLoading(false);
+    }
   }, [loadData]);
 
   const getStockBadge = (product: ProductWithStock) => {
@@ -532,8 +743,9 @@ export const AdminProductsPage: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => setShowCreateModal(true)}
-              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-colors ${COLORS.primary}`}
+              onClick={handleOpenCreateModal}
+              disabled={isModalTransitioning}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-colors ${COLORS.primary} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <Plus className="h-4 w-4" />
               Nuevo Producto
@@ -675,7 +887,6 @@ export const AdminProductsPage: React.FC = () => {
                     <th className="px-6 py-4">Producto</th>
                     <th className="px-6 py-4">Categoría</th>
                     <th className="px-6 py-4">Stock</th>
-                    <th className="px-6 py-4">Min/Max</th>
                     <th className="px-6 py-4">Precio</th>
                     <th className="px-6 py-4">Estado</th>
                     <th className="px-6 py-4 text-right">Acciones</th>
@@ -716,12 +927,6 @@ export const AdminProductsPage: React.FC = () => {
                             </span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          <div className="flex flex-col gap-0.5">
-                            <span>Min: {product.minimum_stock || '-'}</span>
-                            <span>Max: {product.maximum_stock || '-'}</span>
-                          </div>
-                        </td>
                         <td className="px-6 py-4 text-sm font-semibold text-gray-900">
                           {formatCurrency(product.retail_price)}
                         </td>
@@ -735,19 +940,32 @@ export const AdminProductsPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleViewLocations(product)}
-                              className="rounded-lg border border-gray-300 p-2 text-gray-600 transition-colors hover:bg-gray-50"
-                              title="Ver ubicaciones"
+                              disabled={isModalTransitioning}
+                              className="rounded-lg border border-gray-300 p-2 text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Ver y editar ubicaciones y límites de stock"
                             >
                               <Eye className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleEditProduct(product)}
-                              className={`rounded-lg p-2 transition-colors ${COLORS.primary}`}
+                              disabled={isModalTransitioning}
+                              className={`rounded-lg p-2 transition-colors ${COLORS.primary} disabled:opacity-50 disabled:cursor-not-allowed`}
                               title="Editar producto"
                             >
                               <Edit className="h-4 w-4" />
                             </button>
+                            {(product.total_stock || 0) === 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(product)}
+                                disabled={isModalTransitioning || loading}
+                                className={`rounded-lg p-2 transition-colors ${COLORS.danger} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                title="Eliminar producto (solo disponible sin stock)"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -802,7 +1020,7 @@ export const AdminProductsPage: React.FC = () => {
       {showCreateModal && (
         <ProductCreateModal
           isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          onClose={handleCloseCreateModal}
           onProductCreated={handleProductSaved}
         />
       )}
@@ -810,10 +1028,7 @@ export const AdminProductsPage: React.FC = () => {
       {showEditModal && selectedProduct && (
         <ProductEditModal
           isOpen={showEditModal}
-          onClose={() => {
-            setShowEditModal(false);
-            setSelectedProduct(null);
-          }}
+          onClose={handleCloseEditModal}
           product={{
             id: selectedProduct.id,
             name: selectedProduct.name,
@@ -824,8 +1039,6 @@ export const AdminProductsPage: React.FC = () => {
             category: selectedProduct.category?.id || 0,
             category_name: selectedProduct.category?.name || '',
             main_image: selectedProduct.main_image || null,
-            minimum_stock: selectedProduct.minimum_stock,
-            maximum_stock: selectedProduct.maximum_stock,
             total_stock: selectedProduct.total_stock,
             current_price: selectedProduct.retail_price,
             in_stock: (selectedProduct.total_stock || 0) > 0,
@@ -845,11 +1058,9 @@ export const AdminProductsPage: React.FC = () => {
       {showLocationModal && selectedProduct && (
         <LocationModal
           isOpen={showLocationModal}
-          onClose={() => {
-            setShowLocationModal(false);
-            setSelectedProduct(null);
-          }}
+          onClose={handleCloseLocationModal}
           product={selectedProduct}
+          onUpdateLocation={handleUpdateLocation}
         />
       )}
     </div>
