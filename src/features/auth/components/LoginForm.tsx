@@ -146,14 +146,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               htmlFor="username" 
               className="block text-sm font-medium text-gray-700 mb-2"
             >
-              Usuario
+              Usuario (no email)
             </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <Input
                 id="username"
                 type="text"
-                placeholder="tu_usuario"
+                placeholder="tu_usuario (no escribas tu email)"
                 className="pl-11"
                 error={errors.username?.message}
                 {...register('username')}

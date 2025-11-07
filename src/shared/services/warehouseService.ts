@@ -58,10 +58,16 @@ class WarehouseService {
    */
   async getMyWarehouseAssignments(): Promise<WarehouseAssignment[]> {
     try {
-      const response = await apiClient.get<WarehouseAssignment[]>(
+      const response = await apiClient.get<any>(
         `${this.baseUrl}/my-warehouse-seller-info/`
       );
-      return response;
+      // Normalizar distintas formas de respuesta a un array
+      if (Array.isArray(response)) return response as WarehouseAssignment[];
+      if (response?.results && Array.isArray(response.results)) return response.results as WarehouseAssignment[];
+      if (response?.assignments && Array.isArray(response.assignments)) return response.assignments as WarehouseAssignment[];
+      // Algunos backends devuelven un único objeto; envolver en array
+      if (response && typeof response === 'object') return [response] as WarehouseAssignment[];
+      return [];
     } catch (error) {
       console.error('❌ Error al obtener asignaciones de warehouse:', error);
       throw error;
@@ -152,10 +158,21 @@ class WarehouseService {
    */
   async getWarehouseRoles(): Promise<WarehouseRole[]> {
     try {
-      const response = await apiClient.get<{ results: WarehouseRole[] }>(
-        `${this.baseUrl}/roles/`
-      );
-      return response.results;
+      const response = await apiClient.get<any>(`${this.baseUrl}/roles/`);
+      // Normalizar distintas respuestas posibles
+      if (Array.isArray(response)) return (response as any[]).slice() as WarehouseRole[];
+      if (response?.results && Array.isArray(response.results)) return response.results as WarehouseRole[];
+      if (response?.data && Array.isArray(response.data)) return response.data as WarehouseRole[];
+      if (response?.roles && Array.isArray(response.roles)) return response.roles as WarehouseRole[];
+      if (response?.items && Array.isArray(response.items)) return response.items as WarehouseRole[];
+      // Si viene como objeto indexado, tomar sus valores
+      if (response && typeof response === 'object') {
+        const values = Object.values(response);
+        if (values.length && typeof values[0] === 'object' && 'id' in (values[0] as any)) {
+          return values as WarehouseRole[];
+        }
+      }
+      return [];
     } catch (error) {
       console.error('❌ Error al obtener roles de warehouse:', error);
       throw error;
@@ -167,14 +184,55 @@ class WarehouseService {
    */
   async getLocations(): Promise<WarehouseLocation[]> {
     try {
-      const response = await apiClient.get<{ results: WarehouseLocation[] }>(
+      const response = await apiClient.get<any>(
         '/api/warehouse/v1/locations/'
       );
+      if (Array.isArray(response)) return response as WarehouseLocation[];
       return response.results || [];
     } catch (error) {
       console.error('❌ Error al obtener ubicaciones:', error);
       throw error;
     }
+  }
+
+  /**
+   * Crear un rol de warehouse
+   */
+  async createWarehouseRole(data: { role_type: WarehouseRole['role_type']; name: string; description?: string; }): Promise<WarehouseRole> {
+    try {
+      const response = await apiClient.post<WarehouseRole>(`${this.baseUrl}/roles/`, data);
+      return response;
+    } catch (error) {
+      console.error('❌ Error al crear rol de warehouse:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sembrar roles por defecto si no existen
+   */
+  async seedDefaultWarehouseRoles(): Promise<WarehouseRole[]> {
+    const defaults: Array<{ role_type: any; name: string; description: string }> = [
+      { role_type: 'warehouse_seller', name: 'Vendedor Almacén', description: 'Puede vender desde una bodega específica' },
+      { role_type: 'operator', name: 'Operario', description: 'Opera y registra movimientos de inventario' },
+      { role_type: 'editor', name: 'Editor', description: 'Puede crear y editar datos de inventario' },
+      { role_type: 'manager', name: 'Gerente', description: 'Supervisa y gestiona bodegas y personal' },
+    ];
+
+    const created: WarehouseRole[] = [];
+    for (const r of defaults) {
+      try {
+        const role = await this.createWarehouseRole(r);
+        created.push(role);
+      } catch (e: any) {
+        // Si ya existe (unique by role_type), ignorar 400
+        if (e?.status !== 400) {
+          console.warn('No se pudo crear rol por defecto', r.role_type, e);
+        }
+      }
+    }
+
+    return created;
   }
 }
 

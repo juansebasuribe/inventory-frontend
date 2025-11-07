@@ -205,7 +205,16 @@ export class OrderService {
       }
       
       const url = `${ORDER_ENDPOINTS.ORDERS}${params.toString() ? `?${params.toString()}` : ''}`;
-      return await apiClient.get<DjangoResponse<Order>>(url);
+      const resp = await apiClient.get<any>(url);
+      if (Array.isArray(resp)) {
+        return { count: resp.length, next: null, previous: null, results: resp } as DjangoResponse<Order>;
+      }
+      if (resp && typeof resp === 'object') {
+        if (Array.isArray(resp.results)) return resp as DjangoResponse<Order>;
+        const results = Array.isArray(resp.data) ? resp.data : (Array.isArray(resp.orders) ? resp.orders : []);
+        if (results.length) return { count: results.length, next: null, previous: null, results } as DjangoResponse<Order>;
+      }
+      return { count: 0, next: null, previous: null, results: [] } as DjangoResponse<Order>;
     } catch (error) {
       console.error('Error al obtener órdenes:', error);
       throw new Error('Error al cargar las órdenes');

@@ -45,7 +45,8 @@ interface Cart {
 interface AddToCartData {
   bar_code: string;  // ✅ El backend espera bar_code, no product_code
   quantity: number;
-  unit_price?: number;
+  // Para vendedores ejecutivos, el backend acepta 'custom_price'
+  custom_price?: number;
 }
 
 interface UpdateCartItemData {
@@ -184,6 +185,20 @@ export class CartService {
     } catch (error) {
       console.error('Error al vaciar carrito:', error);
       throw new Error('Error al vaciar el carrito');
+    }
+  }
+
+  /**
+   * Cierra el carrito activo y crea una orden (requiere location_id)
+   */
+  async createOrderFromActiveCart(data: { shipping_address: string; location_id: number }): Promise<any> {
+    try {
+      const endpoint = '/api/cart/v1/cart/close-and-create-order/';
+      return await apiClient.post<any>(endpoint, data);
+    } catch (error: any) {
+      console.error('Error al crear orden desde carrito:', error);
+      const msg = error?.message || error?.response?.data?.detail || 'Error al crear la orden desde el carrito';
+      throw new Error(msg);
     }
   }
 

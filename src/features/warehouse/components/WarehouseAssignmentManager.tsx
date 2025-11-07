@@ -6,6 +6,7 @@ import warehouseService, {
   type WarehouseRole 
 } from '../../../shared/services/warehouseService';
 import { userService } from '../../../shared/services/userService';
+import { apiClient } from '../../../shared/services';
 import type { User } from '../../../shared/types/entities';
 
 // ========================
@@ -31,11 +32,14 @@ const WarehouseAssignmentManager: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
 
   // Form state
   const [selectedUser, setSelectedUser] = useState<number | ''>('');
   const [selectedWarehouse, setSelectedWarehouse] = useState<number | ''>('');
   const [selectedRole, setSelectedRole] = useState<number | ''>('');
+  const [userSearch, setUserSearch] = useState('');
+  const [showOnlyActiveUsers, setShowOnlyActiveUsers] = useState(true);
 
   // Filters
   const [filterWarehouse, setFilterWarehouse] = useState<number | ''>('');
@@ -59,6 +63,14 @@ const WarehouseAssignmentManager: React.FC = () => {
     }
   }, [success, error]);
 
+  // Seleccionar rol por defecto cuando se cargan roles y ya hay usuario elegido
+  useEffect(() => {
+    if (selectedUser && !selectedRole && roles && roles.length > 0) {
+      const sellerRole = roles.find(r => r.role_type === 'warehouse_seller');
+      if (sellerRole) setSelectedRole(sellerRole.id);
+    }
+  }, [roles, selectedUser]);
+
   // ========================
   // DATA LOADING
   // ========================
@@ -66,18 +78,53 @@ const WarehouseAssignmentManager: React.FC = () => {
     try {
       setLoading(true);
       
-      // Load assignments
+      // Load assignments (normalizar respuesta)
       const assignmentsData = await warehouseService.getAllWarehouseAssignments();
-      setAssignments(assignmentsData.results);
+      const normalizedAssignments = Array.isArray((assignmentsData as any))
+        ? (assignmentsData as any)
+        : (assignmentsData?.results || []);
+      setAssignments(normalizedAssignments as WarehouseAssignment[]);
 
-      // Load users (sellers only)
+      // Load users and merge with profiles to filter sellers
       const usersData = await userService.getUsers();
-      const sellers = usersData.filter((user: User) => 
-        user.profile?.role === 'seller' || 
-        user.profile?.role === 'seller_tt' || 
-        user.profile?.role === 'seller_executive'
-      );
-      setUsers(sellers);
+      let profiles: any[] = [];
+      try {
+        const profilesResp = await apiClient.get<any>('/api/user/v1/profiles/');
+        profiles = Array.isArray(profilesResp) ? profilesResp : (profilesResp?.results || []);
+      } catch (e) {
+        console.warn('No se pudieron cargar perfiles, se mostrarán todos los usuarios:', e);
+      }
+      const roleByUserId = new Map<number, string>();
+      profiles.forEach(p => {
+        if (p?.user && p?.role) roleByUserId.set(p.user, p.role);
+      });
+      const usersWithRole = usersData.map((u: any) => ({
+        ...u,
+        profile: u.profile || (roleByUserId.has(u.id) ? { role: roleByUserId.get(u.id) } : undefined)
+      }));
+      // Si no hay perfiles (backend cayó o no expone), no filtrar para no dejar la lista vacía
+      if (!profiles || profiles.length === 0) {
+        setUsers(usersWithRole as User[]);
+      } else {
+        const sellers = usersWithRole.filter((user: any) =>
+          user.profile?.role === 'seller' ||
+          user.profile?.role === 'seller_tt' ||
+          user.profile?.role === 'seller_executive'
+        );
+        setUsers(sellers as User[]);
+      }
+
+      // Normalizar lista de usuarios: priorizar vendedores activos; si no hay, mostrar usuarios activos
+      try {
+        const preferred = usersWithRole.filter((user: any) =>
+          user.profile?.role === 'seller' ||
+          user.profile?.role === 'seller_tt' ||
+          user.profile?.role === 'seller_executive'
+        );
+        const activePreferred = (preferred as User[]).filter(u => u.is_active !== false);
+        const activeUsers = (usersWithRole as User[]).filter(u => u.is_active !== false);
+        setUsers(activePreferred.length > 0 ? activePreferred : activeUsers);
+      } catch {}
 
       // Load locations
       const locationsData = await warehouseService.getLocations();
@@ -98,6 +145,13 @@ const WarehouseAssignmentManager: React.FC = () => {
   // ========================
   // HANDLERS
   // ========================
+  // Selecciona por defecto el rol de vendedor de bodega si está disponible
+  const ensureDefaultSellerRole = () => {
+    try {
+      const sellerRole = roles.find(r => r.role_type === 'warehouse_seller');
+      if (sellerRole) setSelectedRole(sellerRole.id);
+    } catch {}
+  };
   const handleUserChange = (userId: number | '') => {
     setSelectedUser(userId);
     
@@ -115,68 +169,81 @@ const WarehouseAssignmentManager: React.FC = () => {
     }
   };
 
-  const handleCreateAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    console.log('📝 Creando asignación...', {
-      selectedUser,
-      selectedWarehouse,
-      selectedRole
-    });
-    
-    if (!selectedUser || !selectedWarehouse) {
-      setError('Vendedor y bodega son requeridos');
-      return;
-    }
 
-    if (!selectedRole) {
-      setError('Error: No se pudo asignar el rol automáticamente');
-      return;
-    }
-
-    try {
-      console.log('🚀 Enviando al backend:', {
-        user: Number(selectedUser),
-        warehouse: Number(selectedWarehouse),
-        role: Number(selectedRole)
-      });
-      
-      await warehouseService.createWarehouseAssignment({
-        user: Number(selectedUser),
-        warehouse: Number(selectedWarehouse),
-        role: Number(selectedRole)
-      });
-
-      setSuccess('✅ Asignación creada exitosamente');
-      setShowCreateModal(false);
-      resetForm();
-      loadData();
-    } catch (err: any) {
-      console.error('❌ Error creating assignment:', err);
-      setError(err.message || 'Error al crear asignación');
-    }
-  };
-
-  const handleDeleteAssignment = async (id: number) => {
-    if (!confirm('¿Estás seguro de desactivar esta asignación?')) {
-      return;
-    }
-
-    try {
-      await warehouseService.deactivateWarehouseAssignment(id);
-      setSuccess('✅ Asignación desactivada exitosamente');
-      loadData();
-    } catch (err: any) {
-      console.error('Error deleting assignment:', err);
-      setError('Error al desactivar asignación');
-    }
-  };
 
   const resetForm = () => {
     setSelectedUser('');
     setSelectedWarehouse('');
     setSelectedRole('');
   };
+
+  const handleDeleteAssignment = async (id: number) => {
+    if (!confirm('Desactivar esta asignacion?')) {
+      return;
+    }
+
+    try {
+      await warehouseService.deactivateWarehouseAssignment(id);
+      setSuccess('Asignacion desactivada exitosamente');
+      loadData();
+    } catch (err: any) {
+      console.error('Error deleting assignment:', err);
+      setError('Error al desactivar asignacion');
+    }
+  };
+
+  const handleCreateAssignmentSafe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!selectedUser || !selectedWarehouse) {
+      setError('Vendedor y bodega son requeridos');
+      return;
+    }
+
+    if (!selectedRole) {
+      ensureDefaultSellerRole();
+    }
+
+    if (!selectedRole) {
+      setError('No se pudo determinar el rol de vendedor de bodega');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await warehouseService.createWarehouseAssignment({
+        user: Number(selectedUser),
+        warehouse: Number(selectedWarehouse),
+        role: Number(selectedRole),
+      });
+      setSuccess('Asignacion creada exitosamente');
+      setShowCreateModal(false);
+      resetForm();
+      loadData();
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message;
+      setError(detail || 'Error al crear asignacion');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
+
+  // Usuarios visibles en el selector del modal (ordenados, opcionalmente solo activos y por búsqueda)
+  const visibleUsers = (users || [])
+    .filter(u => (showOnlyActiveUsers ? u.is_active !== false : true))
+    .filter(u => {
+      if (!userSearch) return true;
+      const q = userSearch.toLowerCase();
+      return (
+        (u.username || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q) ||
+        (`${u.first_name || ''} ${u.last_name || ''}`.trim().toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => (a.username || '').localeCompare(b.username || ''));
 
   // ========================
   // FILTERS
@@ -215,7 +282,7 @@ const WarehouseAssignmentManager: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => { setShowCreateModal(true); ensureDefaultSellerRole(); }}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
         >
           <UserPlus className="w-5 h-5" />
@@ -401,12 +468,29 @@ const WarehouseAssignmentManager: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleCreateAssignment} className="p-6 space-y-4">
+            <form onSubmit={handleCreateAssignmentSafe} className="p-6 space-y-4">
               {/* User Select */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Vendedor *
                 </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    placeholder="Buscar por nombre, usuario o email"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyActiveUsers}
+                      onChange={(e) => setShowOnlyActiveUsers(e.target.checked)}
+                    />
+                    Solo activos
+                  </label>
+                </div>
                 <select
                   value={selectedUser}
                   onChange={(e) => handleUserChange(e.target.value ? Number(e.target.value) : '')}
@@ -414,9 +498,9 @@ const WarehouseAssignmentManager: React.FC = () => {
                   required
                 >
                   <option value="">Seleccionar vendedor...</option>
-                  {users.map(user => (
+                  {visibleUsers.map(user => (
                     <option key={user.id} value={user.id}>
-                      {user.username} - {user.email}
+                      {user.username} - {user.email} {user.is_active === false ? '(inactivo)' : ''}
                     </option>
                   ))}
                 </select>
@@ -442,26 +526,52 @@ const WarehouseAssignmentManager: React.FC = () => {
                 </select>
               </div>
 
-              {/* Mostrar rol auto-asignado en lugar del select */}
-              {selectedRole && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <CheckCircle className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          Rol asignado
-                        </p>
-                        <p className="text-sm text-blue-700 font-semibold">
-                          {roles.find(r => r.id === selectedRole)?.name}
-                        </p>
-                      </div>
-                    </div>
+              {/* Role Select */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Rol en bodega *
+                </label>
+                {roles.length === 0 ? (
+                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 space-y-2">
+                    <div>No hay roles disponibles. Verifica la configuración de roles de bodegas.</div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          setError('');
+                          await warehouseService.seedDefaultWarehouseRoles();
+                          const newRoles = await warehouseService.getWarehouseRoles();
+                          setRoles(newRoles);
+                          const sellerRole = newRoles.find(r => r.role_type === 'warehouse_seller');
+                          if (sellerRole) setSelectedRole(sellerRole.id);
+                        } catch (e: any) {
+                          setError(e?.message || 'No se pudieron crear roles por defecto');
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Crear roles por defecto
+                    </button>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <select
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Seleccionar rol...</option>
+                    {roles
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(role => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
 
               {/* Buttons */}
               <div className="flex space-x-3 pt-4">
@@ -477,9 +587,10 @@ const WarehouseAssignmentManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={submitting || !selectedUser || !selectedWarehouse}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Asignar
+                  {submitting ? 'Asignando...' : 'Asignar'}
                 </button>
               </div>
             </form>

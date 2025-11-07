@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { User } from '../../../shared/types/entities';
 import { UserCard } from './UserCard';
 import userService from '../../../shared/services/userService';
+import { apiClient } from '../../../shared/services';
 
 interface UserListProps {
   refreshKey?: number;
@@ -18,6 +19,7 @@ export const UserList: React.FC<UserListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [pendingToggleIds, setPendingToggleIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadUsers();
@@ -28,7 +30,20 @@ export const UserList: React.FC<UserListProps> = ({
       setLoading(true);
       setError(null);
       const data = await userService.getUsers();
-      setUsers(data);
+      // Enriquecer con perfiles para tener roles visibles y filtrables
+      try {
+        const profilesResp = await apiClient.get<any>('/api/user/v1/profiles/');
+        const profiles = Array.isArray(profilesResp) ? profilesResp : (profilesResp?.results || []);
+        const roleByUserId = new Map<number, string>();
+        profiles.forEach((p: any) => { if (p?.user && p?.role) roleByUserId.set(p.user, p.role); });
+        const merged = (data || []).map((u: any) => ({
+          ...u,
+          profile: u.profile || (roleByUserId.has(u.id) ? { role: roleByUserId.get(u.id) } : undefined)
+        })) as User[];
+        setUsers(merged);
+      } catch {
+        setUsers(data);
+      }
     } catch (err) {
       setError('Error al cargar los usuarios');
       console.error('Error loading users:', err);
@@ -48,12 +63,38 @@ export const UserList: React.FC<UserListProps> = ({
   };
 
   const handleToggleStatus = async (userId: number) => {
+    // Evitar múltiples toggles rápidos sobre el mismo usuario
+    if (pendingToggleIds.has(userId)) return;
+
+    const current = users.find(u => u.id === userId);
+    if (!current) return;
+
+    const desired = !current.is_active;
+
+    // Optimista: reflejar en UI de inmediato
+    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, is_active: desired } : u)));
+    setPendingToggleIds(prev => new Set(prev).add(userId));
+
     try {
-      const updatedUser = await userService.toggleUserStatus(userId);
-      setUsers(users.map((u) => (u.id === userId ? updatedUser : u)));
+      const result = await userService.toggleUserStatus(userId, current.is_active);
+      const merged = {
+        ...current,
+        ...result,
+        // Si el backend no devuelve is_active actualizado, usar el deseado
+        is_active: typeof (result as any)?.is_active === 'boolean' ? (result as any).is_active : desired,
+      } as User;
+      setUsers(prev => prev.map(u => (u.id === userId ? merged : u)));
     } catch (err) {
       console.error('Error toggling user status:', err);
+      // Revertir UI si falló
+      setUsers(prev => prev.map(u => (u.id === userId ? { ...u, is_active: current.is_active } : u)));
       alert('Error al cambiar el estado del usuario');
+    } finally {
+      setPendingToggleIds(prev => {
+        const copy = new Set(prev);
+        copy.delete(userId);
+        return copy;
+      });
     }
   };
 

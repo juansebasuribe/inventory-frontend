@@ -51,51 +51,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const getDisplayPrice = (): number => {
     const userRole = user?.profile?.role;
     const currentPath = location.pathname;
-    const costPrice = product.cost_price || product.retail_price || 0;
-    
+
     // Determinar el rol efectivo (del perfil o de la ruta)
     let effectiveRole = userRole;
     if (!effectiveRole) {
-      // Si no hay rol en el perfil, inferirlo de la ruta
       if (currentPath.includes('/seller-tat')) {
         effectiveRole = 'seller_tt';
       } else if (currentPath.includes('/seller')) {
         effectiveRole = 'seller';
       }
     }
-    
-    // Debug: ver qué valores tenemos
-    console.log('ProductCard Debug:', {
-      productName: product.name,
-      barCode: product.bar_code,
-      userRole,
-      effectiveRole,
-      currentPath,
-      cost_price: product.cost_price,
-      current_price: product.current_price,
-      retail_price: product.retail_price,
-      costPriceUsed: costPrice,
-      calculated_seller: costPrice * 1.20,
-      calculated_tat: costPrice * 1.40
-    });
-    
-    // Si no hay cost_price, usar retail_price como fallback
-    if (!product.cost_price || product.cost_price === 0) {
-      console.warn(`Producto ${product.name} no tiene cost_price, usando retail_price`);
-    }
-    
-    // Si el usuario es seller, mostrar precio con +20%
-    if (effectiveRole === 'seller') {
-      return costPrice * 1.20;
-    }
-    
-    // Si el usuario es seller_tt, mostrar precio con +40%
+
+    // Precios según lógica de backend:
+    // - seller_tt: 20% de descuento sobre retail
+    // - otros (seller, seller_executive, etc.): retail (o current_price del backend si viene calculado)
+    const retail = product.retail_price || 0;
+
     if (effectiveRole === 'seller_tt') {
-      return costPrice * 1.40;
+      return retail * 0.8;
     }
-    
-    // Para otros roles (admin, etc.), mostrar el precio actual del backend
-    return product.current_price || product.retail_price || 0;
+
+    // Mostrar current_price si el backend lo calcula; si no, retail
+    return product.current_price || retail;
   };
 
   // Formatear precio

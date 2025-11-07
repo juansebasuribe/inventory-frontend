@@ -9,7 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../shared/stores';
 import { cartService } from '../features/products/services/cartService';
-import { orderService } from '../features/order/services/orderService';
+import warehouseService, { type WarehouseAssignment } from '../shared/services/warehouseService';
 
 // Usar tipos del servicio
 type Cart = Awaited<ReturnType<typeof cartService.getCart>>;
@@ -20,9 +20,13 @@ export const CartPage: React.FC = () => {
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [creatingOrder, setCreatingOrder] = useState(false);
+  const [assignments, setAssignments] = useState<WarehouseAssignment[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<number | ''>('');
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
 
   useEffect(() => {
     loadCart();
+    loadAssignments();
     console.log('👤 Usuario en CartPage:', user);
     console.log('📧 Email:', user?.email);
     console.log('👨 First name:', user?.first_name);
@@ -44,7 +48,7 @@ export const CartPage: React.FC = () => {
     }
   };
 
-  const handleUpdateQuantity = async (barCode: string, newQuantity: number, additionalDiscount?: number) => {
+  const handleUpdateQuantity = async (barCode: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       handleRemoveItem(barCode);
       return;
@@ -52,8 +56,7 @@ export const CartPage: React.FC = () => {
 
     try {
       await cartService.updateCartItem(barCode, { 
-        quantity: newQuantity,
-        additional_discount_percent: additionalDiscount
+        quantity: newQuantity
       });
       await loadCart();
     } catch (error) {
@@ -63,21 +66,28 @@ export const CartPage: React.FC = () => {
   };
 
   const handleUpdateDiscount = async (barCode: string, currentQuantity: number, newDiscount: number) => {
-    // Solo actualizar si el descuento es válido (0-100)
-    if (newDiscount < 0 || newDiscount > 100) {
-      alert('El descuento debe estar entre 0 y 100%');
-      return;
-    }
+    // Capar a 0-20%
+    const capped = Math.max(0, Math.min(20, Math.round(newDiscount)));
+    setDiscountInputs(prev => ({ ...prev, [barCode]: String(capped) }));
+    // Nota: El backend actual no procesa descuentos adicionales por item.
+    // Solo refrescamos el carrito para mantener consistencia visual.
+    await loadCart();
+  };
 
+  const loadAssignments = async () => {
     try {
-      await cartService.updateCartItem(barCode, { 
-        quantity: currentQuantity,
-        additional_discount_percent: newDiscount
-      });
-      await loadCart();
+      setAssignmentsLoading(true);
+      const data = await warehouseService.getMyWarehouseAssignments();
+      setAssignments(data);
+      // Seleccionar por defecto si hay una sola
+      if (data && data.length === 1) {
+        setSelectedLocation(data[0].warehouse);
+      }
     } catch (error) {
-      console.error('Error al actualizar descuento:', error);
-      alert('Error al actualizar el descuento');
+      console.error('Error al cargar asignaciones de bodega:', error);
+      setAssignments([]);
+    } finally {
+      setAssignmentsLoading(false);
     }
   };
 
@@ -118,18 +128,31 @@ export const CartPage: React.FC = () => {
       return;
     }
 
+    if (!selectedLocation || typeof selectedLocation !== 'number') {
+      alert('Debes seleccionar una bodega/ubicación para crear la orden');
+      return;
+    }
+
     try {
       setCreatingOrder(true);
 
-      const order = await orderService.createOrderFromCart({
-        cart_uuid: cart.cart_uuid,
-        shipping_address: 'Retiro en bodega'
+      const order = await cartService.createOrderFromActiveCart({
+        shipping_address: 'Retiro en bodega',
+        location_id: selectedLocation
       });
 
-      alert(`✅ Orden #${order.order_uuid.slice(0, 8)} creada exitosamente!`);
+      const orderCode = (order?.order_uuid || '').toString();
+      const shortCode = orderCode ? orderCode.slice(0, 8) : '';
+      alert(`✅ Orden ${shortCode ? '#' + shortCode + ' ' : ''}creada exitosamente!`);
       
       // Redirigir al dashboard del vendedor
-      navigate('/seller', { replace: true });
+      // Redirigir según rol
+      const role = user?.profile?.role;
+      if (role === 'seller_tt') {
+        navigate('/seller-tat', { replace: true });
+      } else {
+        navigate('/seller', { replace: true });
+      }
       
     } catch (error: any) {
       console.error('Error al crear orden:', error);
@@ -155,14 +178,17 @@ export const CartPage: React.FC = () => {
   };
 
   const calculateSubtotalWithoutDiscount = () => {
-    // Calcular subtotal SIN descuentos adicionales
+    // Subtotal base sin descuentos (estimado):
+    // - seller_tt: retail estimado = unit_price / 0.8
+    // - otros: retail = unit_price
     if (!cart?.items || cart.items.length === 0) return 0;
-    
-    const subtotal = cart.items.reduce((sum, item) => {
-      const itemSubtotal = item.unit_price * item.quantity;
-      return sum + itemSubtotal;
+    const role = user?.profile?.role;
+    const subtotal = cart.items.reduce((sum, item: any) => {
+      const unit = Number(item.unit_price) || 0;
+      const qty = Number(item.quantity) || 0;
+      const estimatedRetail = role === 'seller_tt' ? unit / 0.8 : unit;
+      return sum + estimatedRetail * qty;
     }, 0);
-    
     return Math.round(subtotal * 100) / 100;
   };
 
@@ -180,6 +206,9 @@ export const CartPage: React.FC = () => {
       maximumFractionDigits: 2
     }).format(value);
   };
+
+  // Estado local para inputs de cantidad
+  const [quantityInputs, setQuantityInputs] = React.useState<Record<string, string>>({});
 
   const getItemCount = () => {
     const count = cart?.total_items || cart?.items?.length || 0;
@@ -313,41 +342,35 @@ export const CartPage: React.FC = () => {
                             <input
                               type="number"
                               min="0"
-                              max="100"
+                              max="20"
                               step="1"
-                              value={discountInputs[item.product_bar_code || item.product_code] ?? (item.additional_discount_percent || 0)}
+                              value={discountInputs[item.product_bar_code || item.product_code] ?? 0}
                               onChange={(e) => {
                                 // Solo actualizar el estado local mientras escribe
                                 const barCode = item.product_bar_code || item.product_code;
-                                setDiscountInputs(prev => ({
-                                  ...prev,
-                                  [barCode]: e.target.value
-                                }));
+                                const val = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
+                                setDiscountInputs(prev => ({ ...prev, [barCode]: String(val) }));
                               }}
                               onBlur={(e) => {
                                 // Cuando pierde el foco, enviar al servidor
-                                const newDiscount = parseFloat(e.target.value) || 0;
-                                if (newDiscount >= 0 && newDiscount <= 100) {
-                                  handleUpdateDiscount(item.product_bar_code || item.product_code, item.quantity, newDiscount);
-                                }
+                                const newDiscount = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
+                                handleUpdateDiscount(item.product_bar_code || item.product_code, item.quantity, newDiscount);
                               }}
                               onKeyPress={(e) => {
                                 // También actualizar al presionar Enter
                                 if (e.key === 'Enter') {
-                                  const newDiscount = parseFloat((e.target as HTMLInputElement).value) || 0;
-                                  if (newDiscount >= 0 && newDiscount <= 100) {
-                                    handleUpdateDiscount(item.product_bar_code || item.product_code, item.quantity, newDiscount);
-                                    (e.target as HTMLInputElement).blur(); // Quitar el foco
-                                  }
+                                  const val = Math.max(0, Math.min(20, parseInt((e.target as HTMLInputElement).value || '0', 10)));
+                                  handleUpdateDiscount(item.product_bar_code || item.product_code, item.quantity, val);
+                                  (e.target as HTMLInputElement).blur(); // Quitar el foco
                                 }
                               }}
                               className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                               placeholder="0"
                             />
                             <span className="text-sm text-gray-600">%</span>
-                            {(item.additional_discount_percent || 0) > 0 && (
+                            {Number(discountInputs[item.product_bar_code || item.product_code] || 0) > 0 && (
                               <span className="text-xs text-green-600 font-medium">
-                                (-${formatCurrency((item.quantity * item.unit_price * (item.additional_discount_percent || 0)) / 100)})
+                                (-${formatCurrency((Number(discountInputs[item.product_bar_code || item.product_code] || 0) / 100) * Number(item.unit_price) * item.quantity)})
                               </span>
                             )}
                           </div>
@@ -378,6 +401,28 @@ export const CartPage: React.FC = () => {
                 <h2 className="text-xl font-bold text-gray-900 mb-6">
                   Resumen de Orden
                 </h2>
+
+                {/* Selección de ubicación requerida */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ubicación de entrega <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{assignmentsLoading ? 'Cargando ubicaciones...' : 'Seleccione una ubicación'}</option>
+                    {Array.isArray(assignments) && assignments.length > 0 && assignments.map((a: any) => (
+                      <option key={a.id ?? a.warehouse} value={a.warehouse ?? a.id}>
+                        {(a.warehouse_details?.name || a.location_name || 'Ubicación')} ({a.warehouse_details?.code || a.location_code || a.warehouse || a.id})
+                      </option>
+                    ))}
+                  </select>
+                  {!selectedLocation && !assignmentsLoading && (
+                    <p className="mt-2 text-xs text-red-600">Debe seleccionar una ubicación para crear la orden.</p>
+                  )}
+                </div>
 
                 {/* Información del vendedor */}
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">
@@ -421,7 +466,7 @@ export const CartPage: React.FC = () => {
                 <div className="space-y-3">
                   <button
                     onClick={handleCreateOrder}
-                    disabled={creatingOrder}
+                    disabled={creatingOrder || !selectedLocation}
                     className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-4 rounded-lg text-lg font-bold hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
                   >
                     {creatingOrder ? (

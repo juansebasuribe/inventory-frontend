@@ -52,8 +52,39 @@ export class ServiceProvider {
   // ========================
   // AUTHENTICATION HELPERS
   // ========================
-  public async login(email: string, password: string) {
-    return this.repositories.user.login(email, password);
+  public async login(identifier: string, password: string) {
+    // Intento por el repositorio (usa username por defecto)
+    try {
+      return await this.repositories.user.login(identifier, password);
+    } catch (e1: any) {
+      const { apiClient } = await import('./api/apiClient');
+      const looksLikeEmail = (identifier || '').includes('@');
+      const isAuthErr = !!e1 && typeof e1 === 'object' && (e1.status === 401 || e1.code === 'AUTH_ERROR');
+
+      // Si falló por credenciales, probar variante con email
+      if (isAuthErr) {
+        try {
+          const resp = await apiClient.post<any>('/auth/jwt/create/', {
+            email: (identifier || '').toLowerCase().trim(),
+            password: (password || '').trim(),
+          });
+          apiClient.setAuthTokens(resp as any);
+          return resp as any;
+        } catch (e2) {
+          // Último intento: si parecía email, probar username en minúsculas
+          if (looksLikeEmail) {
+            const resp2 = await apiClient.post<any>('/auth/jwt/create/', {
+              username: (identifier || '').toLowerCase().trim(),
+              password: (password || '').trim(),
+            });
+            apiClient.setAuthTokens(resp2 as any);
+            return resp2 as any;
+          }
+          throw e2;
+        }
+      }
+      throw e1;
+    }
   }
 
   public async logout() {

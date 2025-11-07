@@ -74,8 +74,12 @@ export const UserEditModal: React.FC<UserEditModalProps> = ({
       });
 
       // Si el rol cambió, actualizar el rol
-      if (user.profile && formData.role !== user.profile.role) {
-        await userService.changeUserRole(user.profile.id, formData.role);
+      if (formData.role !== (user.profile?.role || '')) {
+        if (user.profile?.id) {
+          await userService.changeUserRole(user.profile.id, formData.role);
+        } else {
+          await userService.changeUserRoleByUserId(user.id, formData.role);
+        }
       }
       
       onSuccess?.();

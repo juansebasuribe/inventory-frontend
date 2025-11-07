@@ -102,9 +102,11 @@ export class UserRepository extends BaseRepository<User, CreateUserDto, UpdateUs
   // AUTHENTICATION METHODS
   // ========================
   async login(email: string, password: string): Promise<AuthTokens> {
+    const username = (email || '').trim();
+    const pwd = (password || '').trim();
     const response = await this.apiClient.post<AuthTokens>(
       '/auth/jwt/create/', 
-      { username: email, password }
+      { username, password: pwd }
     );
     
     console.log('🔍 Login response:', response);

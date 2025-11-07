@@ -218,7 +218,22 @@ export const useAuthStore = create<AuthStore>()(
             
             try {
               // Obtener información del usuario actual
-              const user = await services.repositories.user.getCurrentUser();
+              let user = await services.repositories.user.getCurrentUser();
+              // Enriquecer con perfil/rol antes de continuar
+              try {
+                const profile = await apiClient.get<any>(`/api/user/v1/my-profile/${user.id}/`);
+                if (profile && typeof profile === 'object') {
+                  user = { ...(user as any), profile } as any;
+                }
+              } catch (e1) {
+                try {
+                  const profResp = await apiClient.get<any>(`/api/user/v1/profiles/?user=${user.id}`);
+                  const arr = Array.isArray(profResp) ? profResp : (profResp?.results || []);
+                  if (arr && arr.length) {
+                    user = { ...(user as any), profile: arr[0] } as any;
+                  }
+                } catch {}
+              }
               
               console.log('✅ [AuthStore] Usuario cargado completo:', user);
               console.log('🔍 [AuthStore] Tipo de user:', typeof user);

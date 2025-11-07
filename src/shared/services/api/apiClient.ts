@@ -88,6 +88,11 @@ export class ApiClient {
       retries: 3,
       retryDelay: 1000,
       retryCondition: (error: AxiosError) => {
+        // Never retry non-idempotent requests to avoid duplicate actions (e.g., creating orders)
+        const method = (error.config?.method || 'get').toLowerCase();
+        if (['post', 'put', 'patch', 'delete'].includes(method)) {
+          return false;
+        }
         return !error.response || error.response.status >= 500;
       },
     };
@@ -104,6 +109,22 @@ export class ApiClient {
       (config) => {
         config.headers = config.headers ?? {};
 
+        // Helper: detect ONLY JWT endpoints where we must NOT attach tokens
+        const isJwtEndpoint = (url?: string) => {
+          if (!url) return false;
+          try {
+            // Axios may pass absolute or relative; we only care about path
+            return (
+              url.includes('/auth/jwt/create/') ||
+              url.includes('/auth/jwt/refresh/') ||
+              url.includes('/auth/jwt/verify/') ||
+              url.includes('/auth/jwt/logout/')
+            );
+          } catch {
+            return false;
+          }
+        };
+
         if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
           if (config.headers) {
             delete (config.headers as Record<string, unknown>)['Content-Type'];
@@ -111,7 +132,8 @@ export class ApiClient {
           }
         }
 
-        if (this.authTokens?.access) {
+        // Do not attach Authorization on JWT endpoints ONLY; attach for /auth/users/*
+        if (this.authTokens?.access && !isJwtEndpoint(config.url)) {
           config.headers.Authorization = `JWT ${this.authTokens.access}`;
           if (import.meta.env.DEV) {
             console.log(`🔑 Sending request to ${config.url} with token:`, this.authTokens.access.substring(0, 20) + '...');
@@ -144,9 +166,22 @@ export class ApiClient {
       },
       async (error) => {
         const originalRequest = error.config;
+        const isJwtEndpoint = (url?: string) => {
+          if (!url) return false;
+          try {
+            return (
+              url.includes('/auth/jwt/create/') ||
+              url.includes('/auth/jwt/refresh/') ||
+              url.includes('/auth/jwt/verify/') ||
+              url.includes('/auth/jwt/logout/')
+            );
+          } catch {
+            return false;
+          }
+        };
 
         // Handle token refresh for 401 errors
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401 && !originalRequest._retry && !isJwtEndpoint(originalRequest?.url)) {
           originalRequest._retry = true;
           
           try {
@@ -173,6 +208,10 @@ export class ApiClient {
 
     const { status, data } = error.response;
     const errorData = data as any;
+    const firstNonField = Array.isArray(errorData?.non_field_errors) && errorData.non_field_errors.length
+      ? String(errorData.non_field_errors[0])
+      : undefined;
+    const detail = (errorData && (errorData.detail || errorData.message)) || firstNonField;
 
     switch (status) {
       case 400:
@@ -186,22 +225,16 @@ export class ApiClient {
               ? (errorData as Record<string, unknown>).errors as Record<string, any>
               : (detailPayload as Record<string, any> | undefined) || (errorData as Record<string, any> | undefined);
         return new ValidationError(
-          (errorData && errorData.message) ||
-            (detailPayload && detailPayload.detail as string) ||
+          detail ||
+            (detailPayload && (detailPayload.detail as string)) ||
             'Invalid request data',
           validationDetails
         );
         }
       case 401:
-        return new AuthenticationError(
-          errorData.message || 'Authentication required'
-        );
+        return new AuthenticationError(detail || 'Authentication required');
       case 403:
-        return new ApiClientError(
-          errorData.message || 'Access forbidden',
-          'FORBIDDEN',
-          403
-        );
+        return new ApiClientError(detail || 'Access forbidden', 'FORBIDDEN', 403);
       case 404:
         return new ApiClientError(
           errorData.message || 'Resource not found',
@@ -209,14 +242,10 @@ export class ApiClient {
           404
         );
       case 500:
-        return new ApiClientError(
-          'Internal server error',
-          'SERVER_ERROR',
-          500
-        );
+        return new ApiClientError(detail || 'Internal server error', 'SERVER_ERROR', 500);
       default:
         return new ApiClientError(
-          errorData.message || 'Unknown error occurred',
+          detail || errorData.message || 'Unknown error occurred',
           'UNKNOWN_ERROR',
           status
         );
