@@ -27,6 +27,7 @@ const HomePage: React.FC = () => {
       
       switch (role) {
         case 'seller':
+        case 'seller_executive':
           navigate('/seller', { replace: true });
           break;
         case 'seller_tt':
@@ -36,12 +37,11 @@ const HomePage: React.FC = () => {
         case 'supervisor':
         case 'editor':
         case 'operator':
-        case 'seller_executive':
-          navigate('/dashboard', { replace: true });
+          navigate('/admin', { replace: true });
           break;
         default:
           // Si no tiene rol definido, ir a dashboard
-          navigate('/dashboard', { replace: true });
+          navigate('/', { replace: true });
       }
     }
   }, [isAuthenticated, user, navigate]);

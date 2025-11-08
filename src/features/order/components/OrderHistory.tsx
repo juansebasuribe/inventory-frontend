@@ -26,6 +26,8 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
   const [error, setError] = useState<string>('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
+  const [orderDetailLoading, setOrderDetailLoading] = useState(false);
+  const [orderDetailError, setOrderDetailError] = useState('');
   
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -108,12 +110,45 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
   };
 
   // Manejo de selección de orden
-  const handleOrderClick = (order: Order) => {
+  const loadOrderDetail = async (order: Order) => {
     setSelectedOrder(order);
+    setOrderDetailError('');
     setShowOrderDetail(true);
+
+    const identifier = order.order_uuid || order.id;
+    if (!identifier) {
+      setOrderDetailError('No se pudo identificar la orden.');
+      return;
+    }
+
+    try {
+      setOrderDetailLoading(true);
+      const detail = await orderService.getOrderById(String(identifier));
+      setSelectedOrder(detail);
+    } catch (detailError) {
+      console.error('Error al cargar detalle de la orden:', detailError);
+      setSelectedOrder(order);
+      setOrderDetailError('No se pudo cargar el detalle completo de la orden.');
+    } finally {
+      setOrderDetailLoading(false);
+      setShowOrderDetail(true);
+    }
+  };
+
+  const handleOrderClick = (order: Order) => {
     if (onOrderSelect) {
       onOrderSelect(order);
     }
+
+    // Si ya tenemos los items, mostrar directamente
+    if (order.items && order.items.length > 0) {
+      setSelectedOrder(order);
+      setOrderDetailError('');
+      setShowOrderDetail(true);
+      return;
+    }
+
+    void loadOrderDetail(order);
   };
 
   // Aprobar/Confirmar orden (Admin)
@@ -564,7 +599,15 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
               </div>
 
               <div className="mb-6">
-                <h4 className="font-medium mb-3">Productos</h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium">Productos</h4>
+                  {orderDetailLoading && (
+                    <span className="text-xs text-blue-600 animate-pulse">Cargando detalle...</span>
+                  )}
+                </div>
+                {orderDetailError && (
+                  <p className="text-xs text-red-600 mb-2">{orderDetailError}</p>
+                )}
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -572,6 +615,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Precio Unit.</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descuento</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                       </tr>
                     </thead>
@@ -579,16 +623,59 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
                       {selectedOrder.items && selectedOrder.items.length > 0 ? (
                         selectedOrder.items.map((item, index) => (
                           <tr key={item.id || index}>
-                            <td className="px-4 py-2 text-sm text-gray-900">{item.product_name || 'N/A'}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{item.quantity || 0}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">${item.unit_price?.toLocaleString() || '0'}</td>
-                            <td className="px-4 py-2 text-sm font-medium text-gray-900">${item.final_price?.toLocaleString() || item.total_price?.toLocaleString() || (item.unit_price && item.quantity ? (item.unit_price * item.quantity).toLocaleString() : '0')}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              <div className="flex flex-col">
+                                <span>{item.product_name || 'Producto'}</span>
+                                {(item.product_bar_code || item.product_code) && (
+                                  <span className="text-xs text-gray-500 font-mono">
+                                    {item.product_bar_code || item.product_code}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{item.quantity ?? 0}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              ${item.unit_price?.toLocaleString() || '0'}
+                            </td>
+                            <td className="px-4 py-2 text-sm text-gray-900">
+                              {(() => {
+                                const discountPercent =
+                                  item.discount_percentage ??
+                                  (item as any).additional_discount_percent ??
+                                  0;
+                                const discountAmount =
+                                  item.discount_amount ??
+                                  (item as any).additional_discount_amount ??
+                                  0;
+                                if (!discountPercent && !discountAmount) {
+                                  return <span className="text-gray-400">—</span>;
+                                }
+                                return (
+                                  <div className="flex flex-col text-xs text-green-700 font-semibold">
+                                    {discountPercent ? <span>{discountPercent}%</span> : null}
+                                    {discountAmount ? (
+                                      <span>- ${discountAmount.toLocaleString()}</span>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-2 text-sm font-medium text-gray-900">
+                              $
+                              {item.final_price?.toLocaleString() ||
+                                item.total_price?.toLocaleString() ||
+                                (item.unit_price && item.quantity
+                                  ? (item.unit_price * item.quantity).toLocaleString()
+                                  : '0')}
+                            </td>
                           </tr>
                         ))
                       ) : (
                         <tr>
                           <td colSpan={4} className="px-4 py-4 text-sm text-gray-500 text-center">
-                            No hay items en esta orden
+                            {orderDetailLoading
+                              ? 'Cargando productos...'
+                              : 'No hay productos asociados a esta orden'}
                           </td>
                         </tr>
                       )}
@@ -604,12 +691,19 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
                     <span>Subtotal:</span>
                     <span>${selectedOrder.subtotal?.toLocaleString() || '0'}</span>
                   </div>
-                  {(selectedOrder.discount_amount && selectedOrder.discount_amount > 0) && (
-                    <div className="flex justify-between text-green-600">
-                      <span>Descuento:</span>
-                      <span>-${selectedOrder.discount_amount.toLocaleString()}</span>
-                    </div>
-                  )}
+                  {(() => {
+                    const discountTotal =
+                      selectedOrder.total_discount ?? selectedOrder.discount_amount ?? 0;
+                    if (discountTotal > 0) {
+                      return (
+                        <div className="flex justify-between text-green-600">
+                          <span>Descuento:</span>
+                          <span>-${discountTotal.toLocaleString()}</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   {(selectedOrder.tax_amount && selectedOrder.tax_amount > 0) && (
                     <div className="flex justify-between">
                       <span>Impuestos:</span>

@@ -89,7 +89,8 @@ type OrderStatus =
   | 'shipped' | 'SHIPPED'
   | 'delivered' | 'DELIVERED'
   | 'cancelled' | 'CANCELLED'
-  | 'returned' | 'RETURNED';
+  | 'returned' | 'RETURNED'
+  | 'refunded' | 'REFUNDED';
 
 type PaymentStatus = 
   | 'pending' 
@@ -159,7 +160,8 @@ const ORDER_ENDPOINTS = {
   CANCEL_ORDER: (id: string) => `/api/order/v1/orders/${id}/cancel/`,
   UPDATE_STATUS: (id: string) => `/api/order/v1/orders/${id}/status/`,
   ORDER_TRACKING: (orderNumber: string) => `/api/order/v1/tracking/${orderNumber}/`,
-  ORDER_INVOICE: (id: string) => `/api/order/v1/orders/${id}/invoice/`,
+  ORDER_PDF: (id: string) => `/api/order/v1/orders/pdf/${id}/`,
+  ORDER_PDF_DOWNLOAD: (id: string) => `/api/order/v1/orders/pdf/${id}/download/`,
   ORDER_REFUND: (id: string) => `/api/order/v1/orders/${id}/refund/`,
   ORDER_STATS: '/api/order/v1/stats/',
   ORDER_SUMMARY: '/api/order/v1/orders/summary/',    // OrderSummaryView
@@ -329,43 +331,84 @@ export class OrderService {
   /**
    * Obtiene la factura de una orden
    */
-  async getOrderInvoice(orderId: string): Promise<Blob> {
+  private async fetchOrderPdf(orderId: string, download = true): Promise<Blob> {
     try {
-      const response = await fetch(ORDER_ENDPOINTS.ORDER_INVOICE(orderId), {
+      const baseUrl =
+        (typeof apiClient.getBaseURL === 'function' && apiClient.getBaseURL()) ||
+        import.meta.env.VITE_API_BASE_URL ||
+        (typeof window !== 'undefined' ? window.location.origin : '');
+
+      const path = download
+        ? ORDER_ENDPOINTS.ORDER_PDF_DOWNLOAD(orderId)
+        : ORDER_ENDPOINTS.ORDER_PDF(orderId);
+      const endpoint = `${baseUrl.replace(/\/$/, '')}${path}`;
+
+      const tokens = typeof apiClient.getAuthTokens === 'function' ? apiClient.getAuthTokens() : null;
+      const fallbackToken =
+        typeof window !== 'undefined'
+          ? localStorage.getItem('access_token') ||
+            (() => {
+              try {
+                const stored = localStorage.getItem('auth_tokens');
+                return stored ? JSON.parse(stored)?.access || '' : '';
+              } catch {
+                return '';
+              }
+            })()
+          : '';
+      const token = tokens?.access || fallbackToken;
+
+      if (!token) {
+        throw new Error('No hay un token de autenticación válido. Inicia sesión nuevamente.');
+      }
+
+      const response = await fetch(endpoint, {
         method: 'GET',
         headers: {
-          'Authorization': `JWT ${localStorage.getItem('access_token')}`
-        }
+          Authorization: `JWT ${token}`,
+        },
       });
-      
+
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+        let message = `Error ${response.status}: ${response.statusText}`;
+        try {
+          const data = await response.json();
+          message = data?.detail || message;
+        } catch {
+          // ignore json parse errors
+        }
+        throw new Error(message);
       }
-      
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.toLowerCase().includes('application/pdf')) {
+        const fallbackText = await response.text();
+        throw new Error(fallbackText || 'El servidor no devolvió un PDF válido.');
+      }
+
       return await response.blob();
     } catch (error) {
-      console.error('Error al obtener factura:', error);
-      throw new Error('Error al obtener la factura');
+      console.error('Error al obtener PDF de la orden:', error);
+      throw new Error(
+        error instanceof Error ? error.message : 'Error al obtener el PDF de la orden'
+      );
     }
   }
 
-  /**
-   * Descarga la factura de una orden
-   */
-  async downloadInvoice(orderId: string, orderNumber: string): Promise<void> {
+  async downloadOrderPdf(orderId: string, orderNumber: string): Promise<void> {
     try {
-      const blob = await this.getOrderInvoice(orderId);
+      const blob = await this.fetchOrderPdf(orderId, true);
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `factura-${orderNumber}.pdf`;
+      link.download = `orden-${orderNumber || orderId}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error al descargar factura:', error);
-      throw new Error('Error al descargar la factura');
+      console.error('Error al descargar PDF de la orden:', error);
+      throw new Error('Error al descargar el PDF de la orden');
     }
   }
 
@@ -546,4 +589,4 @@ export class OrderService {
 export const orderService = OrderService.getInstance();
 
 // Exportar interfaces principales para uso en componentes
-export type { Order, OrderItem, OrderFilters };
+export type { Order, OrderItem, OrderFilters, OrderStatus };

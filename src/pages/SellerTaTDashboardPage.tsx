@@ -143,7 +143,7 @@ const SellerTaTDashboardPage: React.FC = () => {
         <div className="bg-white/10 backdrop-blur rounded-lg p-3 border border-white/20">
           <p className="text-sm font-semibold text-white flex items-center">
             <TrendingUp className="w-4 h-4 mr-2" />
-            Precio TAT (+40%)
+            Nuestros productos 
           </p>
           <p className="text-xs text-purple-100 mt-1">
             Los precios que ves incluyen un 40% sobre el costo base. Este es tu precio mayorista.

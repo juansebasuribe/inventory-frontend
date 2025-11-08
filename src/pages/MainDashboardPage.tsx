@@ -20,7 +20,6 @@ import {
 
 // Importaciones estáticas (componentes ligeros)
 import { ProviderList } from '../features/providers/components';
-import { StockAlerts } from '../features/inventory/components';
 import { LocationManager, WarehouseAssignmentManager } from '../features/warehouse/components';
 import { CartSidebar } from '../features/cart/components';
 
@@ -330,83 +329,7 @@ const MainDashboardPage: React.FC = () => {
                 <p className="text-xs text-purple-600 mt-2">↗ +8% este mes</p>
               </div>
             </div>
-
-            {/* Alertas y acciones rápidas */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Alertas Críticas</h3>
-                  {dashboardMetrics.lowStockItems > 0 && (
-                    <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
-                      {dashboardMetrics.lowStockItems} alertas
-                    </span>
-                  )}
-                </div>
-                <StockAlerts
-                  onAlertResolve={(alert) => console.log('Alert resolved:', alert)}
-                  onViewProduct={(productCode) => console.log('View product:', productCode)}
-                />
-              </div>
-              
-              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold mb-4">Acciones Rápidas</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => {
-                      setActiveSection('products');
-                      setShowCreateProductModal(true);
-                    }}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-center group"
-                  >
-                    <Plus className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-blue-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-blue-700">Nuevo Producto</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveSection('inventory')}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-center group"
-                  >
-                    <Warehouse className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-green-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-green-700">Ajustar Stock</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveSection('providers')}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors text-center group"
-                  >
-                    <Users className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-purple-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-purple-700">Nuevo Proveedor</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/orders')}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors text-center group"
-                  >
-                    <ShoppingCart className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-orange-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-orange-700">Ver Órdenes</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/categories')}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors text-center group"
-                  >
-                    <Settings className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-indigo-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-indigo-700">Gestionar Categorías</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/inventory')}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors text-center group"
-                  >
-                    <Warehouse className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-purple-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-purple-700">Control de Inventario</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/admin/products')}
-                    className="p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-colors text-center group"
-                  >
-                    <Package className="w-6 h-6 mx-auto mb-2 text-gray-400 group-hover:text-pink-500 transition-colors" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-pink-700">Ver Productos</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
+            
             {/* Estadísticas adicionales */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
@@ -593,7 +516,7 @@ const MainDashboardPage: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
               <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
@@ -630,7 +553,7 @@ const MainDashboardPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
         <div className="flex flex-col lg:flex-row lg:space-x-8">
           {/* Mobile Menu Button */}
           <button
@@ -923,3 +846,4 @@ const MainDashboardPage: React.FC = () => {
 };
 
 export default MainDashboardPage;
+

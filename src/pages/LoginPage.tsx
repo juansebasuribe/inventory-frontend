@@ -37,7 +37,7 @@ export const LoginPage: React.FC = () => {
         navigate('/seller-tat', { replace: true });
         break;
       case 'seller_executive':
-        navigate('/seller', { replace: true }); // Puede usar el mismo dashboard de seller normal
+        navigate('/seller', { replace: true }); 
         break;
       case 'supervisor':
       case 'manager':
@@ -45,15 +45,14 @@ export const LoginPage: React.FC = () => {
         break;
       case 'editor':
       case 'operator':
-        navigate('/dashboard', { replace: true });
+        navigate('/admin', { replace: true });
         break;
       default:
-        navigate('/dashboard', { replace: true });
+        navigate('/admin', { replace: true });
     }
   };
 
   const handleForgotPassword = () => {
-    // TODO: Implementar funcionalidad de recuperación de contraseña
     console.log('Forgot password clicked');
     navigate('/auth/forgot-password');
   };

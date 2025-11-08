@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   ArrowLeft,
   Home,
@@ -10,23 +11,61 @@ import {
   Truck,
   PackageCheck,
   Ban,
+  Download
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { orderService } from '../features/products/services/orderService';
+import type { Order, OrderFilters, OrderStatus } from '../features/products/services/orderService';
 
-const STATUS_STEPS = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+type StatusKey = Extract<
+  OrderStatus,
+  'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED'
+>;
 
-const STATUS_BADGES = {
+type StatusStep = Extract<StatusKey, 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED'>;
+type StatusFilterValue = 'all' | StatusKey;
+
+interface StatusBadgeMeta {
+  className: string;
+  label: string;
+}
+
+interface FilterOption {
+  value: StatusFilterValue;
+  label: string;
+}
+
+interface OrderHistoryEntry {
+  creation_date: string;
+  new_status: string;
+  notes?: string;
+}
+
+type AdminOrder = Order & {
+  history?: OrderHistoryEntry[];
+};
+
+interface OrderAction {
+  label: string;
+  target: StatusKey;
+  style: string;
+  icon: ReactNode;
+  confirmMessage?: string;
+}
+
+const STATUS_STEPS: StatusStep[] = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+
+const STATUS_BADGES: Record<StatusKey, StatusBadgeMeta> = {
   PENDING: { className: 'bg-yellow-100 text-yellow-800', label: 'Pendiente' },
   CONFIRMED: { className: 'bg-blue-100 text-blue-800', label: 'Confirmada' },
   PROCESSING: { className: 'bg-amber-100 text-amber-800', label: 'Procesando' },
   SHIPPED: { className: 'bg-indigo-100 text-indigo-800', label: 'Enviada' },
   DELIVERED: { className: 'bg-green-100 text-green-800', label: 'Entregada' },
   CANCELLED: { className: 'bg-red-100 text-red-800', label: 'Cancelada' },
-  REFUNDED: { className: 'bg-gray-200 text-gray-700', label: 'Reembolsada' },
+  REFUNDED: { className: 'bg-gray-200 text-gray-700', label: 'Reembolsada' }
 };
 
-const STATUS_FILTER_OPTIONS = [
+const STATUS_FILTER_OPTIONS: FilterOption[] = [
   { value: 'all', label: 'Todos los estados' },
   { value: 'PENDING', label: 'Pendientes' },
   { value: 'CONFIRMED', label: 'Confirmadas' },
@@ -34,64 +73,73 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'SHIPPED', label: 'Enviadas' },
   { value: 'DELIVERED', label: 'Entregadas' },
   { value: 'CANCELLED', label: 'Canceladas' },
-  { value: 'REFUNDED', label: 'Reembolsadas' },
+  { value: 'REFUNDED', label: 'Reembolsadas' }
 ];
 
-const ACTION_MAP = {
+const ACTION_MAP: Partial<Record<StatusKey, OrderAction[]>> = {
   PENDING: [
     {
       label: 'Confirmar',
       target: 'CONFIRMED',
       style: 'bg-green-600 hover:bg-green-700 text-white',
       icon: <CheckCircle2 className="w-4 h-4" />,
-      confirmMessage: '¿Confirmar la orden seleccionada? Esto descontará inventario.',
+      confirmMessage: 'Confirmar la orden seleccionada? Esto descontara inventario.'
     },
     {
       label: 'Cancelar',
       target: 'CANCELLED',
       style: 'bg-red-600 hover:bg-red-700 text-white',
       icon: <Ban className="w-4 h-4" />,
-      confirmMessage: '¿Cancelar la orden? Esta acción no se puede deshacer.',
-    },
+      confirmMessage: 'Cancelar la orden? Esta accion no se puede deshacer.'
+    }
   ],
   CONFIRMED: [
     {
       label: 'Marcar como Procesando',
       target: 'PROCESSING',
       style: 'bg-blue-600 hover:bg-blue-700 text-white',
-      icon: <Filter className="w-4 h-4" />,
+      icon: <Filter className="w-4 h-4" />
     },
     {
       label: 'Cancelar',
       target: 'CANCELLED',
       style: 'bg-red-600 hover:bg-red-700 text-white',
-      icon: <Ban className="w-4 h-4" />,
-    },
+      icon: <Ban className="w-4 h-4" />
+    }
   ],
   PROCESSING: [
     {
       label: 'Marcar como Enviada',
       target: 'SHIPPED',
       style: 'bg-indigo-600 hover:bg-indigo-700 text-white',
-      icon: <Truck className="w-4 h-4" />,
-    },
+      icon: <Truck className="w-4 h-4" />
+    }
   ],
   SHIPPED: [
     {
       label: 'Marcar como Entregada',
       target: 'DELIVERED',
       style: 'bg-green-600 hover:bg-green-700 text-white',
-      icon: <PackageCheck className="w-4 h-4" />,
-    },
-  ],
+      icon: <PackageCheck className="w-4 h-4" />
+    }
+  ]
 };
 
-const STATUS_LABEL = (rawStatus) => {
+const isStatusKey = (value: string): value is StatusKey =>
+  Object.prototype.hasOwnProperty.call(STATUS_BADGES, value);
+
+const isStatusStep = (value: StatusKey): value is StatusStep =>
+  STATUS_STEPS.includes(value as StatusStep);
+
+const STATUS_LABEL = (rawStatus?: string | null): string => {
   const normalized = (rawStatus || 'PENDING').toUpperCase();
-  return STATUS_BADGES[normalized]?.label || normalized;
+  if (!isStatusKey(normalized)) {
+    return normalized;
+  }
+  return STATUS_BADGES[normalized].label;
 };
 
-const formatDate = (value) => {
+const formatDate = (value?: string | null): string => {
   if (!value) return 'Sin fecha';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -100,74 +148,101 @@ const formatDate = (value) => {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit',
+    minute: '2-digit'
   });
 };
 
-const formatCurrency = (value) => {
+const formatCurrency = (value?: number | string | null): string => {
   const num = Number(value ?? 0);
   return num.toLocaleString('es-CO');
 };
 
 const AdminOrdersPage = () => {
   const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [actionOrderId, setActionOrderId] = useState(null);
+  const [actionOrderId, setActionOrderId] = useState<string | null>(null);
+  const [downloadingOrderId, setDownloadingOrderId] = useState<string | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
-      const filters = { page, page_size: pageSize };
+      const filters: OrderFilters = { page, page_size: pageSize };
       if (statusFilter !== 'all') filters.status = statusFilter;
       if (dateFrom) filters.date_from = dateFrom;
       if (dateTo) filters.date_to = dateTo;
 
       const response = await orderService.getOrders(filters);
-      const baseResults = Array.isArray(response?.results)
+      const baseResults: Order[] = Array.isArray(response?.results)
         ? response.results
         : Array.isArray(response)
-          ? response
-          : [];
+        ? response
+        : [];
 
-      const enriched = await Promise.all(
-        baseResults.map(async (order) => {
-          if (Array.isArray(order.items) && order.items.length > 0 && Array.isArray(order.history)) {
-            return order;
+      const enriched: AdminOrder[] = await Promise.all(
+        baseResults.map(async (order): Promise<AdminOrder> => {
+          const orderWithHistory = order as AdminOrder;
+          if (
+            Array.isArray(order.items) &&
+            order.items.length > 0 &&
+            Array.isArray(orderWithHistory.history)
+          ) {
+            return orderWithHistory;
           }
+
           const identifier = order.order_uuid || order.id;
-          if (!identifier) return order;
+          if (!identifier) return orderWithHistory;
+
           try {
-            const detail = await orderService.getOrderById(String(identifier));
+            const detail = (await orderService.getOrderById(String(identifier))) as AdminOrder;
             return {
               ...order,
               items: detail.items || order.items,
-              history: detail.history || order.history,
+              history: detail.history || orderWithHistory.history
             };
           } catch (error) {
             console.warn('No se pudo cargar detalle de orden', error);
-            return order;
+            return orderWithHistory;
           }
-        }),
+        })
       );
 
       setOrders(enriched);
       setTotalCount(response?.count ?? enriched.length);
     } catch (error) {
-      console.error('Error al cargar órdenes:', error);
-      alert('Error al cargar las órdenes');
+      console.error('Error al cargar ordenes:', error);
+      alert('Error al cargar las ordenes');
     } finally {
       setLoading(false);
     }
   }, [page, pageSize, statusFilter, dateFrom, dateTo]);
+
+  const handleDownloadPdf = useCallback(async (order: AdminOrder) => {
+    const identifier = (order.order_uuid || order.id)?.toString();
+    if (!identifier) {
+      alert('Orden sin identificador valido.');
+      return;
+    }
+
+    try {
+      setDownloadingOrderId(identifier);
+      const orderNumber = order.order_number || identifier.slice(0, 8);
+      await orderService.downloadOrderPdf(identifier, orderNumber);
+    } catch (error) {
+      console.error('Error al descargar PDF:', error);
+      alert('No se pudo descargar el PDF de la orden');
+    } finally {
+      setDownloadingOrderId(null);
+    }
+  }, []);
 
   useEffect(() => {
     setPage(1);
@@ -177,12 +252,16 @@ const AdminOrdersPage = () => {
     void loadOrders();
   }, [loadOrders]);
 
-  const handleStatusUpdate = async (order, targetStatus, confirmMessage) => {
-    const identifier = order.order_uuid || order.id;
+  const handleStatusUpdate = async (
+    order: AdminOrder,
+    targetStatus: StatusKey,
+    confirmMessage?: string
+  ) => {
+    const identifier = (order.order_uuid || order.id)?.toString();
     if (!identifier) return;
 
-    const shortId = String(identifier).slice(0, 8);
-    const defaultMessage = `¿Marcar la orden #${shortId} como ${STATUS_LABEL(targetStatus)}?`;
+    const shortId = identifier.slice(0, 8);
+    const defaultMessage = `Marcar la orden #${shortId} como ${STATUS_LABEL(targetStatus)}?`;
     if (!window.confirm(confirmMessage || defaultMessage)) {
       return;
     }
@@ -191,7 +270,7 @@ const AdminOrdersPage = () => {
       setActionOrderId(identifier);
       await orderService.updateOrderStatus(String(identifier), {
         status: targetStatus,
-        notes: `Estado cambiado a ${STATUS_LABEL(targetStatus)}`,
+        notes: `Estado cambiado a ${STATUS_LABEL(targetStatus)}`
       });
       await loadOrders();
     } catch (error) {
@@ -202,9 +281,12 @@ const AdminOrdersPage = () => {
     }
   };
 
-  const renderStatusBadges = (status) => {
-    if (status === 'CANCELLED' || status === 'REFUNDED') {
-      const badge = STATUS_BADGES[status] || STATUS_BADGES.PENDING;
+  const renderStatusBadges = (status?: string | null): ReactNode => {
+    const normalized = (status || 'PENDING').toUpperCase();
+    const statusKey: StatusKey = isStatusKey(normalized) ? normalized : 'PENDING';
+
+    if (!isStatusStep(statusKey)) {
+      const badge = STATUS_BADGES[statusKey] || STATUS_BADGES.PENDING;
       return (
         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${badge.className}`}>
           {badge.label}
@@ -212,7 +294,7 @@ const AdminOrdersPage = () => {
       );
     }
 
-    const currentIndex = STATUS_STEPS.indexOf((status || 'PENDING').toUpperCase());
+    const currentIndex = STATUS_STEPS.indexOf(statusKey);
     return (
       <div className="flex flex-wrap gap-1">
         {STATUS_STEPS.map((step, index) => (
@@ -231,12 +313,16 @@ const AdminOrdersPage = () => {
     );
   };
 
-  const renderActionsForOrder = (order) => {
+  const renderActionsForOrder = (order: AdminOrder): ReactNode => {
     const normalized = (order.status || 'PENDING').toUpperCase();
-    const actions = ACTION_MAP[normalized];
-    if (!actions || normalized === 'DELIVERED' || normalized === 'REFUNDED') {
+    const statusKey: StatusKey = isStatusKey(normalized) ? normalized : 'PENDING';
+    const actions = ACTION_MAP[statusKey];
+
+    if (!actions || !actions.length) {
       return null;
     }
+
+    const identifier = (order.order_uuid || order.id)?.toString();
     return (
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
@@ -244,7 +330,7 @@ const AdminOrdersPage = () => {
             key={action.target}
             type="button"
             onClick={() => handleStatusUpdate(order, action.target, action.confirmMessage)}
-            disabled={actionOrderId === (order.order_uuid || order.id)}
+            disabled={actionOrderId === identifier}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${action.style}`}
           >
             {action.icon}
@@ -278,9 +364,9 @@ const AdminOrdersPage = () => {
               </button>
               <div className="h-8 w-px bg-gray-300" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Gestión de órdenes</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Gestion de ordenes</h1>
                 <p className="text-sm text-gray-600">
-                  Supervisa el estado de cada orden y actualízala paso a paso.
+                  Supervisa el estado de cada orden y actualizala paso a paso.
                 </p>
               </div>
             </div>
@@ -316,7 +402,7 @@ const AdminOrdersPage = () => {
               <label className="text-sm font-semibold text-gray-700 mb-2 block">Estado</label>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(event) => setStatusFilter(event.target.value as StatusFilterValue)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               >
                 {STATUS_FILTER_OPTIONS.map((option) => (
@@ -333,7 +419,7 @@ const AdminOrdersPage = () => {
                 <input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                  onChange={(event) => setDateFrom(event.target.value)}
                   className="flex-1 bg-transparent text-sm focus:outline-none"
                 />
               </div>
@@ -345,7 +431,7 @@ const AdminOrdersPage = () => {
                 <input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                  onChange={(event) => setDateTo(event.target.value)}
                   className="flex-1 bg-transparent text-sm focus:outline-none"
                 />
               </div>
@@ -379,16 +465,19 @@ const AdminOrdersPage = () => {
         {ordersEmpty && !loading && (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">📦</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No hay órdenes</h3>
-            <p className="text-gray-600">Ajusta los filtros o espera nuevas órdenes.</p>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No hay ordenes</h3>
+            <p className="text-gray-600">Ajusta los filtros o espera nuevas ordenes.</p>
           </div>
         )}
 
         {!ordersEmpty && !loading && (
           <div className="space-y-4">
             {orders.map((order) => {
-              const identifier = order.order_uuid || order.id;
-              const badge = STATUS_BADGES[(order.status || 'PENDING').toUpperCase()] || STATUS_BADGES.PENDING;
+              const identifier = (order.order_uuid || order.id)?.toString() || '';
+              const normalized = (order.status || 'PENDING').toUpperCase();
+              const badge =
+                STATUS_BADGES[isStatusKey(normalized) ? normalized : 'PENDING'] ||
+                STATUS_BADGES.PENDING;
 
               return (
                 <div key={identifier} className="bg-white rounded-xl shadow-sm border border-gray-100">
@@ -397,7 +486,7 @@ const AdminOrdersPage = () => {
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <h3 className="text-lg font-bold text-gray-900">
-                            Orden #{String(identifier).slice(0, 8)}
+                            Orden #{identifier.slice(0, 8)}
                           </h3>
                           <span className={`px-3 py-1 text-xs font-semibold rounded-full ${badge.className}`}>
                             {badge.label}
@@ -407,7 +496,9 @@ const AdminOrdersPage = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700">
                           <div>
                             <p className="text-gray-500">Vendedor</p>
-                            <p className="font-medium text-gray-900">{order.seller?.username || 'Sin asignar'}</p>
+                            <p className="font-medium text-gray-900">
+                              {order.seller?.username || 'Sin asignar'}
+                            </p>
                             <p className="text-xs text-gray-500">{order.seller?.email}</p>
                           </div>
                           <div>
@@ -426,7 +517,21 @@ const AdminOrdersPage = () => {
                           </div>
                         </div>
                       </div>
-                      <div>{renderActionsForOrder(order)}</div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDownloadPdf(order);
+                          }}
+                          disabled={downloadingOrderId === identifier}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Download className="w-4 h-4" />
+                          <span>{downloadingOrderId === identifier ? 'Descargando...' : 'Descargar PDF'}</span>
+                        </button>
+                        {renderActionsForOrder(order)}
+                      </div>
                     </div>
 
                     {order.items && order.items.length > 0 && (
@@ -441,9 +546,11 @@ const AdminOrdersPage = () => {
                               className="flex items-center justify-between px-4 py-3 text-sm"
                             >
                               <div>
-                                <p className="font-semibold text-gray-900">{item.product_name || 'Producto'}</p>
+                                <p className="font-semibold text-gray-900">
+                                  {item.product_name || 'Producto'}
+                                </p>
                                 <p className="text-xs text-gray-500">
-                                  Código: {item.product_bar_code || 'N/A'}
+                                  Codigo: {item.product_bar_code || 'N/A'}
                                 </p>
                               </div>
                               <div className="text-right">
@@ -455,7 +562,7 @@ const AdminOrdersPage = () => {
                                   {formatCurrency(
                                     item.total_price ??
                                       item.final_price ??
-                                      (item.unit_price || 0) * (item.quantity || 0),
+                                      (item.unit_price || 0) * (item.quantity || 0)
                                   )}
                                 </p>
                               </div>
@@ -470,7 +577,10 @@ const AdminOrdersPage = () => {
                         <p className="font-semibold text-gray-900 mb-2">Historial</p>
                         <ul className="space-y-1">
                           {order.history.map((entry, idx) => (
-                            <li key={`${identifier}-history-${idx}`} className="flex items-center justify-between text-xs">
+                            <li
+                              key={`${identifier}-history-${idx}`}
+                              className="flex items-center justify-between text-xs"
+                            >
                               <span>
                                 {formatDate(entry.creation_date)} — {STATUS_LABEL(entry.new_status)}
                                 {entry.notes ? ` • ${entry.notes}` : ''}
@@ -492,7 +602,7 @@ const AdminOrdersPage = () => {
             <p className="text-sm text-gray-600">
               Mostrando <span className="font-semibold">{(page - 1) * pageSize + 1}</span> a{' '}
               <span className="font-semibold">{Math.min(page * pageSize, totalCount)}</span> de{' '}
-              <span className="font-semibold">{totalCount}</span> órdenes
+              <span className="font-semibold">{totalCount}</span> ordenes
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -504,7 +614,7 @@ const AdminOrdersPage = () => {
                 Anterior
               </button>
               <span className="text-sm text-gray-600">
-                Página {page} de {totalPages}
+                Pagina {page} de {totalPages}
               </span>
               <button
                 type="button"

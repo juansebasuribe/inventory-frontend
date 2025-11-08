@@ -107,7 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Item principal */}
         <div className={cn(
           "group flex items-center",
-          level === 0 ? "px-3 py-2 mx-2 rounded-lg" : "px-6 py-2",
+          level === 0 ? "px-3 py-2 mx-1.5 rounded-lg" : "px-6 py-2",
           isActive 
             ? "bg-primary-100 text-primary-700" 
             : "text-gray-700 hover:bg-gray-100",
@@ -202,7 +202,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}>
         {/* Header */}
         <div className={cn(
-          "flex items-center justify-between px-4 py-4 border-b border-gray-200",
+          "flex items-center justify-between px-3 lg:px-4 py-4 border-b border-gray-200",
           isCollapsed && "justify-center"
         )}>
           {!isCollapsed && (

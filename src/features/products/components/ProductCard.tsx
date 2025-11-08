@@ -70,6 +70,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       return baseCost * 1.2;
     }
 
+    if (effectiveRole === 'seller') {
+      return baseCost * 1.4;
+    }
+
     // Mostrar current_price si el backend lo calcula; si no, retail
     return product.current_price || retail;
   };
@@ -192,19 +196,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             )}
           </div>
           
-          {/* Indicador de descuento T&T */}
-          {(product.is_tt_discount || isSellerTatView) && (
-            <div className="mt-1 text-xs text-green-600 font-medium">
-              ✓ Precio vendedor T&T (Costo + 20%)
-            </div>
-          )}
           
-          {/* Indicador de rol que está viendo el precio */}
-          {product.price_modifier_role && product.price_modifier_role !== 'Precio base' && (
-            <div className="mt-1 text-xs text-blue-600">
-              👤 {product.price_modifier_role}
-            </div>
-          )}
+          
+          
         </div>
 
         {/* Stock */}
