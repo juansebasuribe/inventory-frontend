@@ -25,6 +25,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const { user } = useAuth();
   const location = useLocation();
+  const isSellerTatView = location.pathname.includes('/seller-tat');
   const _instanceId = React.useRef(Math.random().toString(36).slice(2, 9));
   React.useEffect(() => {
     // Debug del usuario
@@ -62,13 +63,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       }
     }
 
-    // Precios según lógica de backend:
-    // - seller_tt: 20% de descuento sobre retail
-    // - otros (seller, seller_executive, etc.): retail (o current_price del backend si viene calculado)
-    const retail = product.retail_price || 0;
+    const retail = Number(product.retail_price) || 0;
+    const baseCost = Number(product.primary_cost_price ?? product.cost_price ?? retail);
 
-    if (effectiveRole === 'seller_tt') {
-      return retail * 0.8;
+    if (effectiveRole === 'seller_tt' || isSellerTatView) {
+      return baseCost * 1.2;
     }
 
     // Mostrar current_price si el backend lo calcula; si no, retail
@@ -112,6 +111,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   };
 
   const discountPercentage = getDiscountPercentage();
+  const displayPrice = getDisplayPrice();
+  const showRetailComparison =
+    Boolean(product.retail_price && product.retail_price > displayPrice && !isSellerTatView);
 
   return (
     <div 
@@ -181,9 +183,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="mb-3">
           <div className="flex items-center space-x-2">
             <span className="text-lg font-bold text-gray-900">
-              {formatPrice(getDisplayPrice())}
+              {formatPrice(displayPrice)}
             </span>
-            {product.retail_price && product.retail_price > getDisplayPrice() && (
+            {showRetailComparison && (
               <span className="text-sm text-gray-500 line-through">
                 {formatPrice(product.retail_price)}
               </span>
@@ -191,9 +193,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
           
           {/* Indicador de descuento T&T */}
-          {product.is_tt_discount && (
+          {(product.is_tt_discount || isSellerTatView) && (
             <div className="mt-1 text-xs text-green-600 font-medium">
-              ✓ Precio vendedor T&T (-20%)
+              ✓ Precio vendedor T&T (Costo + 20%)
             </div>
           )}
           

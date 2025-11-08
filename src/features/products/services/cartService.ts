@@ -9,22 +9,20 @@ import { apiClient } from '../../../shared/services';
 
 interface CartItem {
   id: number;
-  product_code: string;  // Para compatibilidad
-  product_bar_code?: string;  // ✅ El backend devuelve este campo
+  product?: number;
+  product_code?: string;
+  product_bar_code?: string;
   product_name: string;
-  product_image?: string;
-  unit_price: number;
   quantity: number;
-  additional_discount_percent?: number;  // ✅ Descuento adicional del vendedor (0-100%)
-  total_price: number;  // ✅ Precio total (quantity × unit_price × (1 - discount))
-  subtotal: number;
-  discount_percentage: number;
-  discount_amount: number;
-  final_price: number;
-  available_stock: number;
-  is_available: boolean;
-  added_date: string;
-  updated_date: string;
+  base_unit_price: number | string;
+  unit_price: number | string;
+  additional_discount_percent: number | string;
+  additional_discount_amount: number | string;
+  line_subtotal: number | string;
+  line_discount: number | string;
+  line_total: number | string;
+  total_price: number | string;
+  updated_date?: string;
 }
 
 interface Cart {
@@ -33,11 +31,11 @@ interface Cart {
   user_id: number;
   items: CartItem[];
   total_items: number;
-  subtotal: number;
-  total_discount: number;
-  taxes: number;
-  total_amount: number;
-  currency: string;
+  subtotal: number | string;
+  total_discount: number | string;
+  taxes?: number;
+  total_amount: number | string;
+  currency?: string;
   created_date: string;
   updated_date: string;
 }
@@ -57,10 +55,10 @@ interface UpdateCartItemData {
 
 interface CartSummary {
   total_items: number;
-  subtotal: number;
-  total_discount: number;
+  subtotal: number | string;
+  total_discount: number | string;
   taxes: number;
-  total_amount: number;
+  total_amount: number | string;
   currency: string;
 }
 
@@ -298,7 +296,7 @@ export class CartService {
   async isProductInCart(productCode: string): Promise<boolean> {
     try {
       const items = await this.getCartItems();
-      return items.some(item => item.product_code === productCode);
+      return items.some(item => (item.product_code || item.product_bar_code) === productCode);
     } catch (error) {
       console.error('Error al verificar producto en carrito:', error);
       return false;
@@ -311,7 +309,7 @@ export class CartService {
   async getCartItemByProduct(productCode: string): Promise<CartItem | null> {
     try {
       const items = await this.getCartItems();
-      return items.find(item => item.product_code === productCode) || null;
+      return items.find(item => (item.product_code || item.product_bar_code) === productCode) || null;
     } catch (error) {
       console.error('Error al obtener item del carrito:', error);
       return null;

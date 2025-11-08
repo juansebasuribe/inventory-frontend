@@ -150,6 +150,7 @@ export interface Product extends BaseModel {
   // Categorización
   category: number;                       // FK a la categoría
   category_name: string;                  // Nombre de la categoría (solo lectura)
+  provider?: number | null;               // FK del proveedor establecido en el producto base
   
   // Proveedores
   provider_relationships: ProductProviderRelationship[]; // Relaciones con proveedores
@@ -195,6 +196,9 @@ export interface ProductSimple {
   cost_price: number;
   wholesale_price: number;
   main_image: string | null;
+  provider?: number | null;
+  primary_provider?: Provider;
+  primary_cost_price?: number;
   category?: {
     id: number;
     name: string;
@@ -231,6 +235,7 @@ export interface ProductCreate {
   retail_price: number;
   cost_price: number;
   category: number;
+  provider?: number;
   main_image?: File;
   additional_images?: ProductImageCreate[];
   // NOTA: minimum_stock y maximum_stock NO se envían aquí
@@ -243,6 +248,7 @@ export interface ProductUpdate {
   retail_price?: number;
   cost_price?: number;
   category?: number;
+  provider?: number | null;
   main_image?: File | null;
   additional_images?: ProductImageCreate[];
   // NOTA: minimum_stock y maximum_stock NO se envían aquí

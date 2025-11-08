@@ -2,10 +2,11 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { X, Package, DollarSign, Hash, FileText, Tag, Upload, Image, Trash2, ArrowUpDown } from 'lucide-react';
+import { X, Package, DollarSign, Hash, FileText, Tag, Upload, Image, Trash2, ArrowUpDown, Users } from 'lucide-react';
 import { productService } from '../services/productService';
 import { categoryService } from '../services/categoryService';
-import type { ProductCreate } from '../../../shared/types/product.types';
+import { providerService } from '../../../shared/services/providerService';
+import type { ProductCreate, Provider } from '../../../shared/types/product.types';
 
 interface Category {
   id: number;
@@ -38,10 +39,13 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
     bar_code: '',
     retail_price: 0,
     cost_price: 0,
-    category: 1
+    category: 1,
+    provider: undefined
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [mainImage, setMainImage] = useState<File | null>(null);
@@ -53,6 +57,7 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadCategories();
+      loadProviders();
     }
   }, [isOpen]);
 
@@ -62,6 +67,18 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
       setCategories(data.results || []);
     } catch (error) {
       console.error('Error loading categories:', error);
+    }
+  };
+
+  const loadProviders = async () => {
+    try {
+      setProvidersLoading(true);
+      const response = await providerService.getProviders({ active: true, page_size: 100 });
+      setProviders(response.results || []);
+    } catch (error) {
+      console.error('Error loading providers:', error);
+    } finally {
+      setProvidersLoading(false);
     }
   };
 
@@ -79,6 +96,21 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
         ...prev,
         [name]: ''
       }));
+    }
+  };
+
+  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value ? Number(e.target.value) : undefined;
+    setFormData((prev) => ({
+      ...prev,
+      provider: value,
+    }));
+    if (errors.provider) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.provider;
+        return newErrors;
+      });
     }
   };
 
@@ -193,6 +225,9 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
     if (!formData.category) {
       newErrors.category = 'Debe seleccionar una categoría';
     }
+    if (!formData.provider) {
+      newErrors.provider = 'Debe seleccionar un proveedor';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -208,8 +243,8 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
     setLoading(true);
     try {
       // Preparar datos del producto con imágenes
-      const productData: ProductCreate = {
-        ...formData,
+        const productData: ProductCreate = {
+          ...formData,
         main_image: mainImage || undefined,
         // TEMPORAL: Deshabilitar imágenes adicionales hasta que se arregle el backend
         additional_images: ENABLE_ADDITIONAL_IMAGES && additionalImages.length > 0 ? additionalImages.map((file, index) => ({ 
@@ -406,6 +441,34 @@ export const ProductCreateModal: React.FC<ProductCreateModalProps> = ({
                 ))}
               </select>
               {errors.category && <p className="text-red-500 text-xs mt-1">{errors.category}</p>}
+            </div>
+
+            {/* Proveedor */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Users className="w-4 h-4 inline mr-1" />
+                Proveedor *
+              </label>
+              <select
+                name="provider"
+                value={formData.provider ?? ''}
+                onChange={handleProviderChange}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors ${
+                  errors.provider ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                }`}
+                required
+                disabled={providersLoading}
+              >
+                <option value="">
+                  {providersLoading ? 'Cargando proveedores...' : 'Seleccionar proveedor'}
+                </option>
+                {providers.map(provider => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+              {errors.provider && <p className="text-red-500 text-xs mt-1">{errors.provider}</p>}
             </div>
           </div>
 

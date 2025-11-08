@@ -1,226 +1,246 @@
 // src/pages/CartPage.tsx
 
-/**
- * Página del Carrito de Compras
- * Vista completa del carrito con gestión de items y creación de órdenes
- */
-
-import React, { useState, useEffect } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../shared/stores';
 import { cartService } from '../features/products/services/cartService';
-import warehouseService, { type WarehouseAssignment } from '../shared/services/warehouseService';
+import warehouseService, {
+  type WarehouseAssignment,
+} from '../shared/services/warehouseService';
 
-// Usar tipos del servicio
 type Cart = Awaited<ReturnType<typeof cartService.getCart>>;
+type CartItem = Cart['items'][number];
 
-export const CartPage: React.FC = () => {
+const toNumber = (value: number | string | undefined | null): number => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const formatCurrency = (value: number | string, currency = 'COP') => {
+  const numeric = toNumber(value);
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+  }).format(numeric);
+};
+
+const CartPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const sellerCanDiscount = user?.profile?.role === 'seller';
+
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [assignments, setAssignments] = useState<WarehouseAssignment[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<number | ''>('');
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+  const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
+  const [discountInputs, setDiscountInputs] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    loadCart();
-    loadAssignments();
-    console.log('👤 Usuario en CartPage:', user);
-    console.log('📧 Email:', user?.email);
-    console.log('👨 First name:', user?.first_name);
-  }, [user]);
+  const items = cart?.items ?? [];
+  const hasItems = items.length > 0;
+  const currencyCode = cart?.currency ?? 'COP';
 
-  const loadCart = async () => {
+  const loadCart = useCallback(async () => {
     try {
       setLoading(true);
-      const cartData = await cartService.getCart();
-      console.log('🛒 Datos del carrito:', cartData);
-      console.log('📊 Items:', cartData.items);
-      console.log('💰 Total amount:', cartData.total_amount);
-      console.log('🔢 Total items:', cartData.total_items);
-      setCart(cartData);
+      const data = await cartService.getCart();
+      setCart(data);
     } catch (error) {
       console.error('Error al cargar carrito:', error);
+      alert('No se pudo cargar el carrito');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleUpdateQuantity = async (barCode: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      handleRemoveItem(barCode);
-      return;
-    }
-
-    try {
-      await cartService.updateCartItem(barCode, { 
-        quantity: newQuantity
-      });
-      await loadCart();
-    } catch (error) {
-      console.error('Error al actualizar cantidad:', error);
-      alert('Error al actualizar la cantidad');
-    }
-  };
-
-  const handleUpdateDiscount = async (barCode: string, currentQuantity: number, newDiscount: number) => {
-    // Capar a 0-20%
-    const capped = Math.max(0, Math.min(20, Math.round(newDiscount)));
-    setDiscountInputs(prev => ({ ...prev, [barCode]: String(capped) }));
-    // Nota: El backend actual no procesa descuentos adicionales por item.
-    // Solo refrescamos el carrito para mantener consistencia visual.
-    await loadCart();
-  };
-
-  const loadAssignments = async () => {
+  const loadAssignments = useCallback(async () => {
     try {
       setAssignmentsLoading(true);
       const data = await warehouseService.getMyWarehouseAssignments();
       setAssignments(data);
-      // Seleccionar por defecto si hay una sola
-      if (data && data.length === 1) {
-        setSelectedLocation(data[0].warehouse);
+      if (data.length === 1) {
+        setSelectedLocation(data[0].warehouse ?? data[0].id);
       }
     } catch (error) {
-      console.error('Error al cargar asignaciones de bodega:', error);
+      console.error('Error al cargar asignaciones:', error);
       setAssignments([]);
     } finally {
       setAssignmentsLoading(false);
     }
-  };
+  }, []);
 
-  const [discountInputs, setDiscountInputs] = React.useState<Record<string, string>>({});
+  useEffect(() => {
+    void loadCart();
+    void loadAssignments();
+  }, [loadCart, loadAssignments]);
+
+  useEffect(() => {
+    if (!hasItems) {
+      setQuantityInputs({});
+      setDiscountInputs({});
+      return;
+    }
+
+    const nextQty: Record<string, string> = {};
+    const nextDiscount: Record<string, string> = {};
+
+    items.forEach((item) => {
+      const key = item.product_bar_code || item.product_code || String(item.id);
+      nextQty[key] = String(item.quantity ?? 0);
+      nextDiscount[key] = String(item.additional_discount_percent ?? 0);
+    });
+
+    setQuantityInputs(nextQty);
+    setDiscountInputs(nextDiscount);
+  }, [hasItems, items]);
 
   const handleRemoveItem = async (barCode: string) => {
     try {
       await cartService.removeCartItem(barCode);
       await loadCart();
     } catch (error) {
-      console.error('Error al eliminar item:', error);
-      alert('Error al eliminar el producto');
+      console.error('Error eliminando item:', error);
+      alert('No se pudo eliminar el producto');
     }
   };
 
   const handleClearCart = async () => {
-    if (!confirm('¿Estás seguro de que quieres vaciar el carrito?')) {
-      return;
-    }
-
+    if (!confirm('¿Estás seguro de que deseas vaciar el carrito?')) return;
     try {
       await cartService.clearCart();
       await loadCart();
     } catch (error) {
-      console.error('Error al limpiar carrito:', error);
-      alert('Error al vaciar el carrito');
+      console.error('Error vaciando carrito:', error);
+      alert('No se pudo vaciar el carrito');
+    }
+  };
+
+  const handleUpdateQuantity = async (barCode: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      await handleRemoveItem(barCode);
+      return;
+    }
+
+    try {
+      await cartService.updateCartItem(barCode, { quantity: newQuantity });
+      await loadCart();
+    } catch (error) {
+      console.error('Error actualizando cantidad:', error);
+      alert('No se pudo actualizar la cantidad');
+    }
+  };
+
+  const commitQuantityChange = (key: string, rawValue: string, current: number) => {
+    const parsed = parseInt(rawValue, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setQuantityInputs((prev) => ({ ...prev, [key]: String(current) }));
+      return;
+    }
+    if (parsed === current) return;
+    void handleUpdateQuantity(key, parsed);
+  };
+
+  const handleDiscountChange = async (key: string, quantity: number, rawValue: string) => {
+    if (!sellerCanDiscount) return;
+    const capped = Math.max(0, Math.min(20, Math.round(Number(rawValue) || 0)));
+    setDiscountInputs((prev) => ({ ...prev, [key]: String(capped) }));
+    try {
+      await cartService.updateCartItem(key, {
+        quantity,
+        additional_discount_percent: capped,
+      });
+      await loadCart();
+    } catch (error) {
+      console.error('Error al aplicar descuento:', error);
+      alert('No se pudo actualizar el descuento');
+      const fallback = items.find(
+        (item) => (item.product_bar_code || item.product_code || String(item.id)) === key
+      );
+      setDiscountInputs((prev) => ({
+        ...prev,
+        [key]: String(fallback?.additional_discount_percent ?? 0),
+      }));
     }
   };
 
   const handleCreateOrder = async () => {
     if (!cart?.cart_uuid) {
-      alert('Error: Carrito no válido');
+      alert('El carrito es inválido');
       return;
     }
-
-    if (!cart.items || cart.items.length === 0) {
+    if (!hasItems) {
       alert('El carrito está vacío');
       return;
     }
-
     if (!selectedLocation || typeof selectedLocation !== 'number') {
-      alert('Debes seleccionar una bodega/ubicación para crear la orden');
+      alert('Debes seleccionar una ubicación para crear la orden');
       return;
     }
 
     try {
       setCreatingOrder(true);
-
       const order = await cartService.createOrderFromActiveCart({
         shipping_address: 'Retiro en bodega',
-        location_id: selectedLocation
+        location_id: selectedLocation,
       });
-
-      const orderCode = (order?.order_uuid || '').toString();
-      const shortCode = orderCode ? orderCode.slice(0, 8) : '';
-      alert(`✅ Orden ${shortCode ? '#' + shortCode + ' ' : ''}creada exitosamente!`);
-      
-      // Redirigir al dashboard del vendedor
-      // Redirigir según rol
+      const shortCode = String(order?.order_uuid || '').slice(0, 8);
+      alert(`✅ Orden ${shortCode ? `#${shortCode}` : ''} creada exitosamente`);
       const role = user?.profile?.role;
-      if (role === 'seller_tt') {
-        navigate('/seller-tat', { replace: true });
-      } else {
-        navigate('/seller', { replace: true });
-      }
-      
+      navigate(role === 'seller_tt' ? '/seller-tat' : '/seller', { replace: true });
     } catch (error: any) {
       console.error('Error al crear orden:', error);
-      alert(`Error al crear orden: ${error.message}`);
+      alert(error?.message || 'No se pudo crear la orden');
     } finally {
       setCreatingOrder(false);
     }
   };
 
-  const calculateTotal = () => {
-    // Calcular desde items (más confiable)
-    if (!cart?.items || cart.items.length === 0) return 0;
-    
-    const total = cart.items.reduce((sum, item) => {
-      const itemTotal = Number(item.total_price) || (item.unit_price * item.quantity) || 0;
-      console.log(`Item ${item.product_name}: ${itemTotal}`);
-      return sum + itemTotal;
+  const summarySubtotal = useMemo(() => {
+    const apiValue = cart?.subtotal;
+    if (apiValue !== undefined && apiValue !== null) return toNumber(apiValue);
+    return items.reduce((sum, item) => {
+      const fallback = toNumber(item.base_unit_price ?? item.unit_price) * toNumber(item.quantity);
+      return sum + toNumber(item.line_subtotal ?? fallback);
     }, 0);
-    
-    console.log('💰 Total calculado:', total);
-    // Redondear a 2 decimales
-    return Math.round(total * 100) / 100;
-  };
+  }, [cart?.subtotal, items]);
 
-  const calculateSubtotalWithoutDiscount = () => {
-    // Subtotal base sin descuentos (estimado):
-    // - seller_tt: retail estimado = unit_price / 0.8
-    // - otros: retail = unit_price
-    if (!cart?.items || cart.items.length === 0) return 0;
-    const role = user?.profile?.role;
-    const subtotal = cart.items.reduce((sum, item: any) => {
-      const unit = Number(item.unit_price) || 0;
-      const qty = Number(item.quantity) || 0;
-      const estimatedRetail = role === 'seller_tt' ? unit / 0.8 : unit;
-      return sum + estimatedRetail * qty;
+  const summaryDiscount = useMemo(() => {
+    const apiValue = cart?.total_discount;
+    if (apiValue !== undefined && apiValue !== null) return toNumber(apiValue);
+    return items.reduce((sum, item) => {
+      const fallback = toNumber(item.additional_discount_amount) * toNumber(item.quantity);
+      return sum + Math.max(toNumber(item.line_discount ?? fallback), 0);
     }, 0);
-    return Math.round(subtotal * 100) / 100;
-  };
+  }, [cart?.total_discount, items]);
 
-  const calculateTotalDiscount = () => {
-    // Calcular el descuento total aplicado
-    const subtotal = calculateSubtotalWithoutDiscount();
-    const total = calculateTotal();
-    return Math.round((subtotal - total) * 100) / 100;
-  };
+  const summaryTotal = useMemo(() => {
+    const apiValue = cart?.total_amount;
+    if (apiValue !== undefined && apiValue !== null) return toNumber(apiValue);
+    return items.reduce((sum, item) => {
+      const fallback = toNumber(item.unit_price) * toNumber(item.quantity);
+      return sum + toNumber(item.line_total ?? item.total_price ?? fallback);
+    }, 0);
+  }, [cart?.total_amount, items]);
 
-  const formatCurrency = (value: number) => {
-    // Formatear con separador de miles y máximo 2 decimales
-    return new Intl.NumberFormat('es-CO', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    }).format(value);
-  };
-
-  // Estado local para inputs de cantidad
-  const [quantityInputs, setQuantityInputs] = React.useState<Record<string, string>>({});
-
-  const getItemCount = () => {
-    const count = cart?.total_items || cart?.items?.length || 0;
-    console.log('🔢 Item count:', count);
-    return count;
-  };
+  const getItemCount = () => cart?.total_items ?? items.length;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto" />
           <p className="text-gray-600 text-lg">Cargando carrito...</p>
         </div>
       </div>
@@ -229,276 +249,304 @@ export const CartPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/seller')}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                <span className="text-2xl">←</span>
-              </button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                  🛒 Mi Carrito
-                  <span className="text-lg bg-blue-600 text-white px-3 py-1 rounded-full">
-                    {getItemCount()} items
-                  </span>
-                </h1>
-                <p className="text-gray-600 mt-1">Revisa y confirma tu orden de compra</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!cart?.items || cart.items.length === 0 ? (
-          // Carrito vacío
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-8xl mb-6">🛒</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Tu carrito está vacío</h2>
-            <p className="text-gray-600 mb-6">Agrega productos para comenzar a crear tu orden</p>
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/seller')}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="text-gray-600 hover:text-gray-900 text-2xl"
+              aria-label="Volver"
             >
-              Ver Productos
+              ←
+            </button>
+            <div>
+              <p className="text-sm text-gray-500 uppercase tracking-wide">Mi carrito</p>
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+                Productos seleccionados
+                <span className="text-lg bg-blue-600 text-white px-3 py-1 rounded-full">
+                  {getItemCount()} items
+                </span>
+              </h1>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/seller')}
+            className="hidden sm:inline-flex text-sm font-medium text-blue-600 hover:text-blue-800"
+          >
+            Seguir comprando →
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {!hasItems ? (
+          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+            <div className="text-8xl mb-6">🛒</div>
+            <h2 className="text-2xl font-bold text-gray-900">Tu carrito está vacío</h2>
+            <p className="text-gray-600 mt-2">Agrega productos para comenzar a crear tu orden.</p>
+            <button
+              onClick={() => navigate('/seller')}
+              className="mt-6 inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
+            >
+              Explorar catálogo
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Lista de productos */}
-            <div className="lg:col-span-2 space-y-4">
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <div className="flex justify-between items-center mb-6">
+            <section className="lg:col-span-2 space-y-4">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-gray-900">
-                    Productos ({cart.items.length})
+                    Productos ({items.length})
                   </h2>
-                  {cart.items.length > 0 && (
-                    <button
-                      onClick={handleClearCart}
-                      className="text-red-600 hover:text-red-700 font-medium text-sm"
-                    >
-                      🗑️ Vaciar carrito
-                    </button>
-                  )}
+                  <button
+                    onClick={handleClearCart}
+                    className="text-sm font-medium text-red-600 hover:text-red-700 flex items-center gap-2"
+                  >
+                    🗑️ Vaciar carrito
+                  </button>
                 </div>
 
                 <div className="space-y-4">
-                  {cart.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start gap-4">
-                        {/* Icono */}
-                        <div className="w-20 h-20 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <span className="text-blue-600 text-3xl">📦</span>
-                        </div>
+                  {items.map((item) => {
+                    const key = item.product_bar_code || item.product_code || String(item.id);
+                    const quantity = toNumber(item.quantity);
+                    const unitPrice = toNumber(item.unit_price);
+                    const baseUnitPrice = toNumber(item.base_unit_price ?? unitPrice);
+                    const discountAmount = toNumber(
+                      item.line_discount ?? toNumber(item.additional_discount_amount) * quantity
+                    );
+                    const lineTotal = toNumber(item.line_total ?? item.total_price ?? unitPrice * quantity);
+                    const discountPercent = discountInputs[key] ?? String(item.additional_discount_percent ?? 0);
 
-                        {/* Info del producto */}
-                        <div className="flex-1">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                            {item.product_name}
-                          </h3>
-                          <p className="text-sm text-gray-500 font-mono mb-3">
-                            {item.product_bar_code || item.product_code}
-                          </p>
+                    return (
+                      <article
+                        key={item.id}
+                        className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow bg-white"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="w-20 h-20 bg-blue-50 rounded-lg flex items-center justify-center text-3xl">
+                            📦
+                          </div>
 
-                          {/* Controles de cantidad */}
-                          <div className="flex items-center gap-4 mb-3">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleUpdateQuantity(item.product_bar_code || item.product_code, item.quantity - 1)}
-                                className="w-8 h-8 border-2 border-gray-300 rounded-lg flex items-center justify-center hover:bg-red-50 hover:border-red-400 text-gray-700 hover:text-red-600 transition-colors font-bold"
-                              >
-                                −
-                              </button>
-                              <span className="w-16 text-center text-lg font-bold text-gray-900">
-                                {item.quantity}
-                              </span>
-                              <button
-                                onClick={() => handleUpdateQuantity(item.product_bar_code || item.product_code, item.quantity + 1)}
-                                className="w-8 h-8 border-2 border-gray-300 rounded-lg flex items-center justify-center hover:bg-green-50 hover:border-green-400 text-gray-700 hover:text-green-600 transition-colors font-bold"
-                              >
-                                +
-                              </button>
+                          <div className="flex-1 space-y-3">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">{item.product_name}</h3>
+                              <p className="text-xs text-gray-500 font-mono">
+                                {item.product_bar_code || item.product_code}
+                              </p>
                             </div>
 
-                            <div className="text-sm text-gray-600">
-                              ${formatCurrency(item.unit_price)} c/u
+                            <div className="flex flex-wrap items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    const next = quantity - 1;
+                                    setQuantityInputs((prev) => ({ ...prev, [key]: String(Math.max(next, 0)) }));
+                                    void handleUpdateQuantity(key, next);
+                                  }}
+                                  className="w-8 h-8 border-2 border-gray-300 rounded-lg flex items-center justify-center hover:bg-red-50 hover:border-red-400 text-gray-700 hover:text-red-600 transition-colors font-bold"
+                                  aria-label="Disminuir cantidad"
+                                >
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={quantityInputs[key] ?? String(quantity)}
+                                  onChange={(e) => {
+                                    const sanitized = e.target.value.replace(/[^0-9]/g, '');
+                                    setQuantityInputs((prev) => ({ ...prev, [key]: sanitized }));
+                                  }}
+                                  onBlur={(e) => commitQuantityChange(key, e.target.value, quantity)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      commitQuantityChange(key, (e.target as HTMLInputElement).value, quantity);
+                                    }
+                                  }}
+                                  className="w-16 text-center text-lg font-bold text-gray-900 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                                <button
+                                  onClick={() => {
+                                    const next = quantity + 1;
+                                    setQuantityInputs((prev) => ({ ...prev, [key]: String(next) }));
+                                    void handleUpdateQuantity(key, next);
+                                  }}
+                                  className="w-8 h-8 border-2 border-gray-300 rounded-lg flex items-center justify-center hover:bg-green-50 hover:border-green-400 text-gray-700 hover:text-green-600 transition-colors font-bold"
+                                  aria-label="Aumentar cantidad"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              <div className="text-sm text-gray-600 leading-5">
+                                <p>
+                                  <span className="text-gray-500">Precio base:</span>{' '}
+                                  {formatCurrency(baseUnitPrice, currencyCode)}
+                                </p>
+                                <p>
+                                  <span className="text-gray-500">Precio final:</span>{' '}
+                                  {formatCurrency(unitPrice, currencyCode)}{' '}
+                                  <span className="text-gray-400">c/u</span>
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+                              <span className="font-medium text-gray-600">💰 Desc. adicional:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="20"
+                                step="1"
+                                value={discountPercent}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
+                                  setDiscountInputs((prev) => ({ ...prev, [key]: String(val) }));
+                                }}
+                                onBlur={(e) => handleDiscountChange(key, quantity, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    void handleDiscountChange(key, quantity, (e.target as HTMLInputElement).value);
+                                  }
+                                }}
+                                disabled={!sellerCanDiscount}
+                                className={`w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                                  !sellerCanDiscount ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''
+                                }`}
+                              />
+                              <span className="text-gray-500">%</span>
+                              {discountAmount > 0 && (
+                                <span className="text-xs text-green-600 font-semibold">
+                                  −{formatCurrency(discountAmount, currencyCode)}
+                                </span>
+                              )}
+                              {!sellerCanDiscount && (
+                                <span className="text-xs text-gray-400">Solo lectura</span>
+                              )}
                             </div>
                           </div>
 
-                          {/* Campo de descuento adicional */}
-                          <div className="flex items-center gap-2">
-                            <label className="text-sm text-gray-600 font-medium">
-                              💰 Desc. adicional:
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="20"
-                              step="1"
-                              value={discountInputs[item.product_bar_code || item.product_code] ?? 0}
-                              onChange={(e) => {
-                                // Solo actualizar el estado local mientras escribe
-                                const barCode = item.product_bar_code || item.product_code;
-                                const val = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
-                                setDiscountInputs(prev => ({ ...prev, [barCode]: String(val) }));
-                              }}
-                              onBlur={(e) => {
-                                // Cuando pierde el foco, enviar al servidor
-                                const newDiscount = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
-                                handleUpdateDiscount(item.product_bar_code || item.product_code, item.quantity, newDiscount);
-                              }}
-                              onKeyPress={(e) => {
-                                // También actualizar al presionar Enter
-                                if (e.key === 'Enter') {
-                                  const val = Math.max(0, Math.min(20, parseInt((e.target as HTMLInputElement).value || '0', 10)));
-                                  handleUpdateDiscount(item.product_bar_code || item.product_code, item.quantity, val);
-                                  (e.target as HTMLInputElement).blur(); // Quitar el foco
-                                }
-                              }}
-                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              placeholder="0"
-                            />
-                            <span className="text-sm text-gray-600">%</span>
-                            {Number(discountInputs[item.product_bar_code || item.product_code] || 0) > 0 && (
-                              <span className="text-xs text-green-600 font-medium">
-                                (-${formatCurrency((Number(discountInputs[item.product_bar_code || item.product_code] || 0) / 100) * Number(item.unit_price) * item.quantity)})
-                              </span>
-                            )}
+                          <div className="text-right">
+                            <p className="text-xs uppercase text-gray-500 tracking-wide">Total línea</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {formatCurrency(lineTotal, currencyCode)}
+                            </p>
+                            <button
+                              onClick={() => handleRemoveItem(key)}
+                              className="mt-3 text-sm font-medium text-red-600 hover:text-red-700"
+                            >
+                              🗑️ Eliminar
+                            </button>
                           </div>
                         </div>
-
-                        {/* Precio y eliminar */}
-                        <div className="text-right">
-                          <div className="text-2xl font-bold text-blue-600 mb-2">
-                            ${formatCurrency(Number(item.total_price) || 0)}
-                          </div>
-                          <button
-                            onClick={() => handleRemoveItem(item.product_bar_code || item.product_code)}
-                            className="text-red-500 hover:text-red-700 text-sm font-medium"
-                          >
-                            🗑️ Eliminar
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            </section>
 
-            {/* Resumen */}
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">
-                  Resumen de Orden
-                </h2>
+            <aside className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm p-6 sticky top-4 space-y-6">
+                <h2 className="text-xl font-bold text-gray-900">Resumen de orden</h2>
 
-                {/* Selección de ubicación requerida */}
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">
                     Ubicación de entrega <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={selectedLocation}
                     onChange={(e) => setSelectedLocation(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">{assignmentsLoading ? 'Cargando ubicaciones...' : 'Seleccione una ubicación'}</option>
-                    {Array.isArray(assignments) && assignments.length > 0 && assignments.map((a: any) => (
-                      <option key={a.id ?? a.warehouse} value={a.warehouse ?? a.id}>
-                        {(a.warehouse_details?.name || a.location_name || 'Ubicación')} ({a.warehouse_details?.code || a.location_code || a.warehouse || a.id})
+                    <option value="">
+                      {assignmentsLoading ? 'Cargando ubicaciones...' : 'Selecciona una ubicación'}
+                    </option>
+                    {assignments.map((assignment) => (
+                      <option
+                        key={assignment.id ?? assignment.warehouse}
+                        value={assignment.warehouse ?? assignment.id}
+                      >
+                        {(assignment.warehouse_details?.name ||
+                          assignment.role_details?.name ||
+                          'Ubicación') +
+                          ' (' +
+                          (assignment.warehouse_details?.code ||
+                            assignment.warehouse ||
+                            assignment.id) +
+                          ')'}
                       </option>
                     ))}
                   </select>
-                  {!selectedLocation && !assignmentsLoading && (
-                    <p className="mt-2 text-xs text-red-600">Debe seleccionar una ubicación para crear la orden.</p>
+                  {!assignmentsLoading && !selectedLocation && (
+                    <p className="text-xs text-red-600 mt-1">
+                      Debes elegir dónde se entregará la orden.
+                    </p>
                   )}
                 </div>
 
-                {/* Información del vendedor */}
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">👤 Vendedor</h3>
-                  {user ? (
-                    <>
-                      <p className="text-sm text-gray-900 font-medium">{user.username}</p>
-                      {user.email && (
-                        <p className="text-xs text-gray-600 mt-1">{user.email}</p>
-                      )}
-                      {user.first_name && (
-                        <p className="text-xs text-gray-600 mt-1">{user.first_name} {user.last_name}</p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500">Cargando información...</p>
-                  )}
+                <div className="p-4 bg-gray-50 rounded-lg space-y-1">
+                  <p className="text-sm font-semibold text-gray-700">👤 Vendedor</p>
+                  <p className="text-sm text-gray-900">{user?.username ?? 'Usuario'}</p>
+                  {user?.email && <p className="text-xs text-gray-500">{user.email}</p>}
                 </div>
 
-                <div className="space-y-3 mb-6">
+                <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-gray-700">
                     <span>Subtotal:</span>
-                    <span className="font-semibold">${formatCurrency(calculateSubtotalWithoutDiscount())}</span>
+                    <span className="font-semibold">
+                      {formatCurrency(summarySubtotal, currencyCode)}
+                    </span>
                   </div>
-                  {calculateTotalDiscount() > 0 && (
+                  {summaryDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
-                      <span>💰 Descuento:</span>
-                      <span className="font-semibold">-${formatCurrency(calculateTotalDiscount())}</span>
+                      <span>Descuento:</span>
+                      <span className="font-semibold">
+                        −{formatCurrency(summaryDiscount, currencyCode)}
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between text-gray-700">
                     <span>Impuestos:</span>
                     <span className="font-semibold">$0</span>
                   </div>
-                  <div className="border-t-2 border-gray-300 pt-3 flex justify-between text-xl font-bold text-gray-900">
+                  <div className="flex justify-between text-xl font-bold text-gray-900 border-t border-gray-200 pt-3">
                     <span>Total:</span>
-                    <span className="text-blue-600">${formatCurrency(calculateTotal())}</span>
+                    <span className="text-blue-600">
+                      {formatCurrency(summaryTotal, currencyCode)}
+                    </span>
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <button
-                    onClick={handleCreateOrder}
-                    disabled={creatingOrder || !selectedLocation}
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 px-4 rounded-lg text-lg font-bold hover:from-blue-700 hover:to-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    {creatingOrder ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Creando orden...
-                      </span>
-                    ) : (
-                      '✅ Crear Orden de Compra'
-                    )}
-                  </button>
+                <button
+                  onClick={handleCreateOrder}
+                  disabled={creatingOrder || !selectedLocation}
+                  className="w-full py-3 rounded-lg text-white font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-lg"
+                >
+                  {creatingOrder ? 'Creando orden…' : 'Confirmar orden'}
+                </button>
+                <button
+                  onClick={() => navigate('/seller')}
+                  className="w-full py-3 rounded-lg text-gray-700 font-medium bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  Seguir comprando
+                </button>
 
-                  <button
-                    onClick={() => navigate('/seller')}
-                    className="w-full bg-gray-100 text-gray-700 py-3 px-4 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                  >
-                    ← Continuar comprando
-                  </button>
-                </div>
-
-                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>💡 Nota:</strong> Los productos se entregarán en la bodega asignada.
-                  </p>
-                </div>
+                <p className="text-xs text-blue-700 bg-blue-50 rounded-lg p-3">
+                  💡 Recuerda confirmar tu ubicación para garantizar que los productos se preparen en la bodega
+                  correcta.
+                </p>
               </div>
-            </div>
+            </aside>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };
 
 export default CartPage;
+

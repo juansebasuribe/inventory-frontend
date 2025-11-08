@@ -75,6 +75,9 @@ interface ProductWithStock {
   // Se almacenan en InventoryItem por ubicación
   stock_by_location: InventoryItem[];
   needs_restock?: boolean;
+  primary_provider?: ProductType['primary_provider'];
+  primary_cost_price?: number;
+  provider_relationships?: ProductType['provider_relationships'];
 }
 
 const ITEMS_PER_PAGE = 10;
@@ -147,7 +150,10 @@ const toProductWithStock = (
     // NOTA: minimum_stock y maximum_stock están en cada ubicación (InventoryItem),
     // no a nivel de producto
     stock_by_location: inventoryItems,
-    needs_restock: needsRestock
+    needs_restock: needsRestock,
+    primary_provider: product.primary_provider,
+    primary_cost_price: product.primary_cost_price,
+    provider_relationships: product.provider_relationships || []
   };
 };
 
@@ -1045,7 +1051,9 @@ export const AdminProductsPage: React.FC = () => {
             needs_restock: selectedProduct.needs_restock || false,
             active: true,
             additional_images: [],
-            provider_relationships: [],
+            primary_provider: selectedProduct.primary_provider,
+            primary_cost_price: selectedProduct.primary_cost_price,
+            provider_relationships: selectedProduct.provider_relationships || [],
             can_modify_price: true,
             is_tt_discount: false,
             creation_date: '',

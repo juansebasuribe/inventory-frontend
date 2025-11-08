@@ -7,13 +7,16 @@ import {
   Upload,
   Trash2,
   Save,
+  Users,
 } from "lucide-react";
 import { productService } from "../services/productService";
 import { categoryService } from "../services/categoryService";
+import { providerService } from "../../../shared/services/providerService";
 import { getProductImageUrl } from "../../../shared/utils/url.utils";
 import type {
   Product,
   ProductUpdate,
+  Provider,
 } from "../../../shared/types/product.types";
 
 interface Category {
@@ -51,9 +54,12 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     retail_price: 0,
     cost_price: 0,
     category: 1,
+    provider: undefined as number | undefined,
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [currentMainImage, setCurrentMainImage] = useState("");
@@ -108,6 +114,28 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    const fetchProviders = async () => {
+      try {
+        setProvidersLoading(true);
+        const response = await providerService.getProviders({ active: true, page_size: 100 });
+        if (isMounted) {
+          setProviders(response.results || []);
+        }
+      } catch (error) {
+        console.error("Error loading providers:", error);
+      } finally {
+        if (isMounted) setProvidersLoading(false);
+      }
+    };
+    fetchProviders();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
   // Cargar datos del producto
   useEffect(() => {
     if (isOpen && product) {
@@ -117,6 +145,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
         retail_price: product.retail_price,
         cost_price: product.cost_price,
         category: product.category,
+        provider: product.primary_provider?.id,
       });
 
       if (product.main_image) {
@@ -232,11 +261,29 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
     if (!formData.category) {
       newErrors.category = "Categoría requerida";
     }
+    if (!formData.provider) {
+      newErrors.provider = "Proveedor requerido";
+    }
 
     // NOTA: minimum_stock y maximum_stock se configuran en InventoryItem, no aquí
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value ? Number(e.target.value) : undefined;
+    setFormData((prev) => ({
+      ...prev,
+      provider: value,
+    }));
+    if (errors.provider) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.provider;
+        return newErrors;
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -404,6 +451,43 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
               </select>
               {errors.category && (
                 <p className="text-red-500 text-xs mt-1">{errors.category}</p>
+              )}
+            </div>
+
+            {/* Proveedor */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Proveedor *
+              </label>
+              <select
+                name="provider"
+                value={formData.provider ?? ""}
+                onChange={handleProviderChange}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${
+                  errors.provider ? "border-red-500" : "border-gray-300"
+                }`}
+                required
+                disabled={loading || providersLoading}
+              >
+                <option value="">
+                  {providersLoading
+                    ? "Cargando proveedores..."
+                    : "Seleccionar proveedor"}
+                </option>
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+              {errors.provider && (
+                <p className="text-red-500 text-xs mt-1">{errors.provider}</p>
+              )}
+              {!providersLoading && providers.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  No hay proveedores activos disponibles. Registra uno antes de
+                  guardar.
+                </p>
               )}
             </div>
 

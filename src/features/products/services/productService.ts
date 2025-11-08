@@ -205,6 +205,9 @@ class DataTransformer {
     if (data.description) {
       formData.append('description', data.description);
     }
+    if (data.provider) {
+      formData.append('provider', data.provider.toString());
+    }
 
     // NOTA: minimum_stock y maximum_stock NO se envían al endpoint de productos.
     // Estos campos pertenecen a InventoryItem y se configuran al agregar el producto a una ubicación.
@@ -246,6 +249,13 @@ class DataTransformer {
     
     if (data.category !== undefined && !isNaN(data.category) && data.category > 0) {
       formData.append('category', data.category.toString());
+    }
+    if (data.provider !== undefined) {
+      if (data.provider === null) {
+        formData.append('provider', '');
+      } else if (!isNaN(data.provider)) {
+        formData.append('provider', data.provider.toString());
+      }
     }
 
     // NOTA: minimum_stock y maximum_stock NO se envían al endpoint de productos.
@@ -301,6 +311,7 @@ class DataTransformer {
       current_price: Number(product.current_price),
       cost_price: Number(product.cost_price),
       total_stock: Number(product.total_stock),
+      primary_cost_price: this.toNumber(product.primary_cost_price),
       minimum_stock: minimumStock,
       maximum_stock: maximumStock,
       // Asegurar booleans
