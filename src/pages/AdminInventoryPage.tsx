@@ -869,7 +869,7 @@ export const AdminInventoryPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
               <button
                 type="button"
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/admin')}
                 className="inline-flex items-center gap-1 transition-colors hover:text-gray-900"
               >
                 <Home className="h-4 w-4" />

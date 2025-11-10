@@ -193,7 +193,6 @@ export const CartSidebar: React.FC<CartSidebarProps> = ({
     try {
       setCreatingOrder(true);
       
-      console.log('🛒 Cart UUID:', cart.cart_uuid);
       
       // Crear orden con el cart_uuid
       const order = await orderService.createOrderFromCart({

@@ -28,19 +28,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isSellerTatView = location.pathname.includes('/seller-tat');
   const _instanceId = React.useRef(Math.random().toString(36).slice(2, 9));
   React.useEffect(() => {
-    // Debug del usuario
-    console.log('👤 User Debug:', {
-      user: user,
-      hasProfile: !!user?.profile,
-      profile: user?.profile,
-      role: user?.profile?.role
-    });
-    // tslint:disable-next-line:no-console
-    console.log(`[mount] ProductCard id=${_instanceId.current} product=${product?.bar_code} time=${Date.now()}`);
-    return () => {
-      // tslint:disable-next-line:no-console
-      console.log(`[unmount] ProductCard id=${_instanceId.current} product=${product?.bar_code} time=${Date.now()}`);
-    };
+   
+    
   }, [product?.bar_code]);
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
@@ -70,7 +59,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       return baseCost * 1.2;
     }
 
-    if (effectiveRole === 'seller') {
+    if (effectiveRole === 'seller' || effectiveRole === 'seller_executive') {
       return baseCost * 1.4;
     }
 

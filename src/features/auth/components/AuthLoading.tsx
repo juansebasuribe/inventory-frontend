@@ -1,17 +1,12 @@
-// src/features/auth/components/AuthLoading.tsx
 import React from 'react';
 
-// ========================
-// COMPONENT PROPS
-// ========================
+
 interface AuthLoadingProps {
   message?: string;
   className?: string;
 }
 
-// ========================
-// AUTH LOADING COMPONENT
-// ========================
+
 export const AuthLoading: React.FC<AuthLoadingProps> = ({
   message = 'Verificando autenticación...',
   className = ''

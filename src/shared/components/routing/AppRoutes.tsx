@@ -31,7 +31,9 @@ import {
   MainDashboardPage,
   SellerDashboardPage,
   SellerTaTDashboardPage,
-  CartPage
+  CartPage,
+  ActivatePage,
+  AdminUsersPage
 } from '../../../pages';
 import AdminOrdersPage from '../../../pages/AdminOrdersPage';
 import AdminCategoriesPage from '../../../pages/AdminCategoriesPage';
@@ -86,6 +88,11 @@ export const AppRoutes: React.FC = () => {
       <Route 
         path="/auth/logout" 
         element={<LogoutPage />}
+      />
+
+      <Route 
+        path="/activate/:uid/:token" 
+        element={<ActivatePage/>} 
       />
 
       {/* Página de no autorizado */}
@@ -238,6 +245,15 @@ export const AppRoutes: React.FC = () => {
         element={
           <AdminRoute>
             <AdminProductsPage />
+          </AdminRoute>
+        } 
+      />
+
+      <Route 
+        path="/admin/users" 
+        element={
+          <AdminRoute>
+            <AdminUsersPage />
           </AdminRoute>
         } 
       />

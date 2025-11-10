@@ -5,9 +5,7 @@ import { useAuth } from '../../stores';
 import { AuthLoading } from '../../../features/auth/components/AuthLoading';
 import type { UserRole } from '../../types/entities';
 
-// ========================
-// TYPES
-// ========================
+
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRoles?: UserRole[];
@@ -19,13 +17,13 @@ interface ProtectedRouteProps {
 // ROLE HIERARCHY (MAYOR = MÁS PERMISOS)
 // ========================
 const ROLE_HIERARCHY: Record<UserRole, number> = {
-  'seller': 1,          // Menor nivel - solo su página
-  'seller_tt': 2,       // Solo su página TaT
-  'operator': 3,        // Operador básico
-  'editor': 4,          // Puede editar
-  'seller_executive': 5,// Vendedor con permisos especiales
-  'supervisor': 6,      // Supervisor
-  'manager': 7          // Máximo nivel
+  'seller': 1,          
+  'seller_tt': 2,       
+  'operator': 3,        
+  'editor': 4,          
+  'seller_executive': 5,
+  'supervisor': 6,      
+  'manager': 7          
 };
 
 // ========================
@@ -34,17 +32,14 @@ const ROLE_HIERARCHY: Record<UserRole, number> = {
 const hasRequiredRole = (userRole: UserRole, requiredRoles: UserRole[]): boolean => {
   if (!requiredRoles.length) return true;
   
-  // Si el usuario tiene el rol exacto requerido, permitir acceso
   if (requiredRoles.includes(userRole)) {
     return true;
   }
   
-  // Para roles de jerarquía, verificar si tiene nivel suficiente
   const userLevel = ROLE_HIERARCHY[userRole];
   const minRequiredLevel = Math.min(...requiredRoles.map(role => ROLE_HIERARCHY[role]));
   
-  // Solo permitir si el nivel del usuario es mayor o igual al mínimo requerido
-  // Y el rol no es seller o seller_tt (estos son especiales, no tienen jerarquía)
+ 
   if (userRole === 'seller' || userRole === 'seller_tt') {
     // Sellers solo pueden acceder si están explícitamente en requiredRoles
     return requiredRoles.includes(userRole);

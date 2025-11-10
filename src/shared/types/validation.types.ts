@@ -14,12 +14,12 @@ export interface ImageValidationResult {
 }
 
 export interface ImageValidationRules {
-  maxSize: number;              // Tamaño máximo en bytes
-  allowedTypes: string[];       // Extensiones permitidas
-  maxWidth?: number;            // Ancho máximo en píxeles
-  maxHeight?: number;           // Alto máximo en píxeles
-  minWidth?: number;            // Ancho mínimo en píxeles
-  minHeight?: number;           // Alto mínimo en píxeles
+  maxSize: number;              
+  allowedTypes: string[];       
+  maxWidth?: number;            
+  maxHeight?: number;           
+  minWidth?: number;           
+  minHeight?: number;           
 }
 
 // ========================================
@@ -107,11 +107,11 @@ export interface BusinessRule {
 }
 
 export interface ProductBusinessRules {
-  priceConsistency: BusinessRule;    // Precio venta > precio costo
-  stockMinimum: BusinessRule;        // Stock mínimo requerido
-  providerRequired: BusinessRule;    // Al menos un proveedor
-  categoryRequired: BusinessRule;    // Categoría obligatoria
-  imageQuality: BusinessRule;        // Calidad de imagen mínima
+  priceConsistency: BusinessRule;    
+  stockMinimum: BusinessRule;        
+  providerRequired: BusinessRule;    
+  categoryRequired: BusinessRule;    
+  imageQuality: BusinessRule;       
 }
 
 // ========================================

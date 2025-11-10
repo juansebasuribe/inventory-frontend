@@ -235,20 +235,7 @@ export const useAuthStore = create<AuthStore>()(
                 } catch {}
               }
               
-              console.log('✅ [AuthStore] Usuario cargado completo:', user);
-              console.log('🔍 [AuthStore] Tipo de user:', typeof user);
-              console.log('🔍 [AuthStore] Es objeto:', user !== null && typeof user === 'object');
-              console.log('🔍 [AuthStore] Keys del user:', Object.keys(user));
-              console.log('🔍 [AuthStore] JSON.stringify:', JSON.stringify(user, null, 2));
-              console.log('🔍 [AuthStore] Detalles del usuario:', {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                hasProfile: !!user.profile,
-                profile: user.profile,
-                profileKeys: user.profile ? Object.keys(user.profile) : [],
-                role: user.profile?.role
-              });
+              
               
               // Guardar usuario en localStorage para persistencia
               localStorage.setItem('auth_user', JSON.stringify(user));
@@ -395,23 +382,25 @@ export const useAuthStore = create<AuthStore>()(
         // ========================
         hasRole: (role: UserRole) => {
           const { user } = get();
-          return user?.profile?.role === role;
+          return user?.profile?.role?.toLowerCase() === role;
         },
 
         hasAnyRole: (roles: UserRole[]) => {
           const { user } = get();
-          const userRole = user?.profile?.role;
-          return userRole ? roles.includes(userRole) : false;
+          const userRole = user?.profile?.role?.toLowerCase();
+          return userRole ? roles.map((r) => r.toLowerCase()).includes(userRole) : false;
         },
 
         canAccess: (resource: string) => {
           const { user } = get();
-          const userRole = user?.profile?.role;
+          const userRole = user?.profile?.role?.toLowerCase();
           
           if (!userRole) return false;
           
           const allowedRoles = PERMISSIONS[resource];
-          return allowedRoles ? allowedRoles.includes(userRole) : false;
+          return allowedRoles
+            ? allowedRoles.map((role) => role.toLowerCase()).includes(userRole)
+            : false;
         },
 
         // ========================

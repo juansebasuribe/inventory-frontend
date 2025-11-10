@@ -11,7 +11,9 @@ import { useAuth } from '../shared/stores';
 import { cartService } from '../features/products/services/cartService';
 import warehouseService, {
   type WarehouseAssignment,
+  type WarehouseLocation,
 } from '../shared/services/warehouseService';
+
 
 type Cart = Awaited<ReturnType<typeof cartService.getCart>>;
 type CartItem = Cart['items'][number];
@@ -37,12 +39,22 @@ const formatCurrency = (value: number | string, currency = 'COP') => {
 const CartPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const sellerCanDiscount = user?.profile?.role === 'seller';
+  const userRole = (
+    user?.profile?.role ||
+    (user as any)?.role ||
+    'seller'
+  ) as string;
+
+
+  const isExecutive = userRole === 'seller_executive';
+  const sellerCanDiscount = isExecutive;
+  
 
   const [cart, setCart] = useState<Cart | null>(null);
   const [loading, setLoading] = useState(true);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [assignments, setAssignments] = useState<WarehouseAssignment[]>([]);
+  const [locationCandidates, setLocationCandidates] = useState<WarehouseAssignment[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<number | ''>('');
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
@@ -51,6 +63,13 @@ const CartPage: React.FC = () => {
   const items = cart?.items ?? [];
   const hasItems = items.length > 0;
   const currencyCode = cart?.currency ?? 'COP';
+  const getDisplayUnitPrice = useCallback(
+    (item: CartItem) => {
+      const sourceValue = item.current_price ?? item.unit_price ?? item.base_unit_price;
+      return toNumber(sourceValue);
+    },
+    []
+  );
 
   const loadCart = useCallback(async () => {
     try {
@@ -70,9 +89,37 @@ const CartPage: React.FC = () => {
       setAssignmentsLoading(true);
       const data = await warehouseService.getMyWarehouseAssignments();
       setAssignments(data);
-      if (data.length === 1) {
-        setSelectedLocation(data[0].warehouse ?? data[0].id);
+    if (data.length === 1) {
+      setSelectedLocation(data[0].warehouse ?? data[0].id);
+    }
+
+    setLocationCandidates(data);
+
+    if (!data.length && userRole === 'seller_tt') {
+      try {
+        const locations = await warehouseService.getLocations();
+        const fallbackAssignments = locations.map((location) => ({
+          id: location.id,
+          user: user?.id ?? 0,
+          user_username: user?.username ?? '',
+          user_email: user?.email ?? '',
+          warehouse: location.id,
+          warehouse_details: location,
+          role: 0,
+          role_details: undefined as any,
+          assigned_date: new Date().toISOString(),
+          assigned_by: null,
+          assigned_by_username: '',
+          is_active: true,
+        }));
+        setLocationCandidates(fallbackAssignments);
+        if (fallbackAssignments.length === 1) {
+          setSelectedLocation(fallbackAssignments[0].warehouse ?? fallbackAssignments[0].id);
+        }
+      } catch (error) {
+        console.warn('No se pudieron cargar las ubicaciones alternativas:', error);
       }
+    }
     } catch (error) {
       console.error('Error al cargar asignaciones:', error);
       setAssignments([]);
@@ -211,10 +258,10 @@ const CartPage: React.FC = () => {
     const apiValue = cart?.subtotal;
     if (apiValue !== undefined && apiValue !== null) return toNumber(apiValue);
     return items.reduce((sum, item) => {
-      const fallback = toNumber(item.base_unit_price ?? item.unit_price) * toNumber(item.quantity);
+      const fallback = getDisplayUnitPrice(item) * toNumber(item.quantity);
       return sum + toNumber(item.line_subtotal ?? fallback);
     }, 0);
-  }, [cart?.subtotal, items]);
+  }, [cart?.subtotal, items, getDisplayUnitPrice]);
 
   const summaryDiscount = useMemo(() => {
     const apiValue = cart?.total_discount;
@@ -229,10 +276,10 @@ const CartPage: React.FC = () => {
     const apiValue = cart?.total_amount;
     if (apiValue !== undefined && apiValue !== null) return toNumber(apiValue);
     return items.reduce((sum, item) => {
-      const fallback = toNumber(item.unit_price) * toNumber(item.quantity);
+      const fallback = getDisplayUnitPrice(item) * toNumber(item.quantity);
       return sum + toNumber(item.line_total ?? item.total_price ?? fallback);
     }, 0);
-  }, [cart?.total_amount, items]);
+  }, [cart?.total_amount, items, getDisplayUnitPrice]);
 
   const getItemCount = () => cart?.total_items ?? items.length;
 
@@ -311,8 +358,8 @@ const CartPage: React.FC = () => {
                   {items.map((item) => {
                     const key = item.product_bar_code || item.product_code || String(item.id);
                     const quantity = toNumber(item.quantity);
-                    const unitPrice = toNumber(item.unit_price);
-                    const baseUnitPrice = toNumber(item.base_unit_price ?? unitPrice);
+                    const baseUnitPrice = toNumber(item.base_unit_price ?? item.unit_price);
+                    const unitPrice = getDisplayUnitPrice(item);
                     const discountAmount = toNumber(
                       item.line_discount ?? toNumber(item.additional_discount_amount) * quantity
                     );
@@ -382,51 +429,43 @@ const CartPage: React.FC = () => {
 
                               <div className="text-sm text-gray-600 leading-5">
                                 <p>
-                                  <span className="text-gray-500">Precio base:</span>{' '}
+                                  <span className="text-gray-500">Costo:</span>{' '}
                                   {formatCurrency(baseUnitPrice, currencyCode)}
                                 </p>
-                                <p>
-                                  <span className="text-gray-500">Precio final:</span>{' '}
-                                  {formatCurrency(unitPrice, currencyCode)}{' '}
-                                  <span className="text-gray-400">c/u</span>
-                                </p>
+                               
                               </div>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
-                              <span className="font-medium text-gray-600">💰 Desc. adicional:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                max="20"
-                                step="1"
-                                value={discountPercent}
-                                onChange={(e) => {
-                                  const val = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
-                                  setDiscountInputs((prev) => ({ ...prev, [key]: String(val) }));
-                                }}
-                                onBlur={(e) => handleDiscountChange(key, quantity, e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    void handleDiscountChange(key, quantity, (e.target as HTMLInputElement).value);
-                                  }
-                                }}
-                                disabled={!sellerCanDiscount}
-                                className={`w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
-                                  !sellerCanDiscount ? 'bg-gray-100 cursor-not-allowed text-gray-500' : ''
-                                }`}
-                              />
-                              <span className="text-gray-500">%</span>
-                              {discountAmount > 0 && (
-                                <span className="text-xs text-green-600 font-semibold">
-                                  −{formatCurrency(discountAmount, currencyCode)}
-                                </span>
+                            {isExecutive && (
+                                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+                                  <span className="font-medium text-gray-600">💰 Desc. adicional:</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    step="1"
+                                    value={discountPercent}
+                                    onChange={(e) => {
+                                      const val = Math.max(0, Math.min(20, parseInt(e.target.value || '0', 10)));
+                                      setDiscountInputs((prev) => ({ ...prev, [key]: String(val) }));
+                                    }}
+                                    onBlur={(e) => handleDiscountChange(key, quantity, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        void handleDiscountChange(key, quantity, (e.target as HTMLInputElement).value);
+                                      }
+                                    }}
+                                    className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                  />
+                                  <span className="text-gray-500">%</span>
+                                  {discountAmount > 0 && (
+                                    <span className="text-xs text-green-600 font-semibold">
+                                      −{formatCurrency(discountAmount, currencyCode)}
+                                    </span>
+                                  )}
+                                </div>
                               )}
-                              {!sellerCanDiscount && (
-                                <span className="text-xs text-gray-400">Solo lectura</span>
-                              )}
-                            </div>
                           </div>
 
                           <div className="text-right">
@@ -465,7 +504,7 @@ const CartPage: React.FC = () => {
                     <option value="">
                       {assignmentsLoading ? 'Cargando ubicaciones...' : 'Selecciona una ubicación'}
                     </option>
-                    {assignments.map((assignment) => (
+                    {(locationCandidates.length ? locationCandidates : assignments).map((assignment) => (
                       <option
                         key={assignment.id ?? assignment.warehouse}
                         value={assignment.warehouse ?? assignment.id}
@@ -549,4 +588,3 @@ const CartPage: React.FC = () => {
 };
 
 export default CartPage;
-

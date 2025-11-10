@@ -16,6 +16,7 @@ interface CartItem {
   quantity: number;
   base_unit_price: number | string;
   unit_price: number | string;
+  current_price?: number | string;
   additional_discount_percent: number | string;
   additional_discount_amount: number | string;
   line_subtotal: number | string;
@@ -57,9 +58,9 @@ interface CartSummary {
   total_items: number;
   subtotal: number | string;
   total_discount: number | string;
-  taxes: number;
+  taxes?: number;
   total_amount: number | string;
-  currency: string;
+  currency?: string;
 }
 
 interface CartValidationResult {
@@ -102,6 +103,14 @@ export class CartService {
       CartService.instance = new CartService();
     }
     return CartService.instance;
+  }
+
+  private _resolveBarCode(item: CartItem): string {
+    const barCode = item.product_bar_code || item.product_code;
+    if (!barCode) {
+      throw new Error('El item no tiene un código válido');
+    }
+    return barCode;
   }
 
   // ========================================
@@ -263,9 +272,9 @@ export class CartService {
         total_items: cart.total_items,
         subtotal: cart.subtotal,
         total_discount: cart.total_discount,
-        taxes: cart.taxes,
+        taxes: typeof cart.taxes === 'number' ? cart.taxes : 0,
         total_amount: cart.total_amount,
-        currency: cart.currency,
+        currency: cart.currency ?? 'COP',
       };
     } catch (error) {
       console.error('Error al obtener resumen del carrito:', error);
@@ -324,8 +333,7 @@ export class CartService {
       const existingItem = await this.getCartItemByProduct(productCode);
       
       if (existingItem) {
-        // ✅ Usar product_code del item para actualizar
-        const barCode = existingItem.product_bar_code || existingItem.product_code;
+        const barCode = this._resolveBarCode(existingItem);
         return await this.updateCartItem(barCode, {
           quantity: existingItem.quantity + increment
         });
@@ -353,7 +361,7 @@ export class CartService {
       }
 
       const newQuantity = existingItem.quantity - decrement;
-      const barCode = existingItem.product_bar_code || existingItem.product_code;
+      const barCode = this._resolveBarCode(existingItem);
       
       if (newQuantity <= 0) {
         await this.removeCartItem(barCode);
@@ -376,24 +384,24 @@ export class CartService {
     try {
       if (quantity <= 0) {
         const existingItem = await this.getCartItemByProduct(productCode);
-        if (existingItem) {
-          const barCode = existingItem.product_bar_code || existingItem.product_code;
-          await this.removeCartItem(barCode);
-        }
+      if (existingItem) {
+        const barCode = this._resolveBarCode(existingItem);
+        await this.removeCartItem(barCode);
+      }
         return null;
       }
 
-      const existingItem = await this.getCartItemByProduct(productCode);
-      
-      if (existingItem) {
-        const barCode = existingItem.product_bar_code || existingItem.product_code;
-        return await this.updateCartItem(barCode, { quantity });
-      } else {
-        return await this.addToCart({
-          bar_code: productCode,  // ✅ Cambio product_code → bar_code
-          quantity
-        });
-      }
+        const existingItem = await this.getCartItemByProduct(productCode);
+        
+        if (existingItem) {
+          const barCode = this._resolveBarCode(existingItem);
+          return await this.updateCartItem(barCode, { quantity });
+        } else {
+          return await this.addToCart({
+            bar_code: productCode,  // ✅ Cambio product_code → bar_code
+            quantity
+          });
+        }
     } catch (error) {
       console.error('Error al establecer cantidad:', error);
       throw new Error('Error al establecer la cantidad del producto');

@@ -15,3 +15,5 @@ export { default as CartPage } from './CartPage';
 
 // TEMPORAL - Para testing de servicios
 export { default as ProductServiceTestPage } from './ProductServiceTestPage';
+export { default as ActivatePage } from './ActivatePage';
+export { default as AdminUsersPage } from './AdminUsersPage';

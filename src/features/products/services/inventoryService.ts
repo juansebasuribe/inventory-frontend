@@ -323,15 +323,12 @@ export class InventoryService {
       const queryString = params.toString();
       const url = `${INVENTORY_ENDPOINTS.ITEMS}${queryString ? `?${queryString}` : ''}`;
       
-      console.log(`[InventoryService] Requesting: ${url}`);
+      
       
       // Obtener respuesta del backend
       const backendResponse = await apiClient.get<BackendInventoryListResponse>(url);
       
-      console.log(`[InventoryService] Backend response:`, {
-        count: backendResponse.count,
-        results: backendResponse.results?.length
-      });
+      
       
       // Transformar los items del backend al formato de la UI
       const transformedResults = backendResponse.results.map(transformBackendItem);
@@ -388,13 +385,13 @@ export class InventoryService {
     bin?: string;
   }): Promise<InventoryItem> {
     try {
-      console.log(`[InventoryService] Actualizando item ${id}:`, updateData);
+      
       
       // Primero obtener el item actual para tener todos los campos requeridos
       const currentItem = await apiClient.get<BackendInventoryItem>(
         INVENTORY_ENDPOINTS.ITEM_DETAIL(id)
       );
-      console.log('[InventoryService] Item actual del backend:', currentItem);
+      
       
       // Preparar datos completos para el PUT (el backend requiere todos los campos)
       const fullUpdateData = {
@@ -408,7 +405,7 @@ export class InventoryService {
         bin: updateData.bin ?? currentItem.bin ?? null,
       };
       
-      console.log('[InventoryService] Enviando datos completos:', fullUpdateData);
+      
       
       // Usar PUT con datos completos
       const response = await apiClient.put<BackendInventoryItem>(
@@ -416,12 +413,11 @@ export class InventoryService {
         fullUpdateData
       );
       
-      console.log('[InventoryService] Item actualizado (backend):', response);
+     
       
       // Transformar respuesta del backend al formato de la UI
       const transformedItem = transformBackendItem(response);
-      console.log('[InventoryService] Item transformado:', transformedItem);
-      
+     
       return transformedItem;
     } catch (error) {
       console.error('Error al actualizar item de inventario:', error);
@@ -460,21 +456,13 @@ export class InventoryService {
     bin?: string;
   }): Promise<InventoryMovement> {
     try {
-      console.log('📤 [InventoryService] Creando movimiento:', data);
-      console.log('📤 [InventoryService] Tipos de datos:', {
-        movement_type: typeof data.movement_type,
-        product_barcode: typeof data.product_barcode,
-        quantity: typeof data.quantity,
-        to_location_code: typeof data.to_location_code,
-        from_location_code: typeof data.from_location_code
-      });
       
       const response = await apiClient.post<InventoryMovement>(
         INVENTORY_ENDPOINTS.MOVEMENTS,
         data
       );
       
-      console.log('✅ [InventoryService] Movimiento creado:', response);
+      
       return response;
     } catch (error: any) {
       console.error('❌ [InventoryService] Error al crear movimiento:', error);
@@ -488,7 +476,6 @@ export class InventoryService {
       
       // Si es ValidationError o ApiClientError, tiene la propiedad details
       if (error.details) {
-        console.log('🔍 [InventoryService] Analizando error.details:', error.details);
         
         const details = error.details;
         

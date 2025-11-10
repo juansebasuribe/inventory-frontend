@@ -308,21 +308,13 @@ const SellerTaTDashboardPage: React.FC = () => {
         <div className="flex items-center space-x-3 mb-3">
           <Store className="w-8 h-8" />
           <div>
-            <h3 className="text-xl font-bold">Precio TAT (+40%)</h3>
+            <h3 className="text-xl font-bold">Productos TITA Comercializadora</h3>
             <p className="text-purple-100 mt-2">
-              Los precios que ves incluyen un 40% sobre el costo base. Este es tu precio mayorista para ventas B2B.
+              Busca tus productos y crea la orden de compra
             </p>
           </div>
         </div>
-        <div className="bg-white/10 backdrop-blur rounded-lg p-3 border border-white/20 mt-3">
-          <div className="flex items-center text-sm">
-            <TrendingUp className="w-4 h-4 mr-2" />
-            <span className="font-semibold">Margen de Ganancia: 40%</span>
-          </div>
-          <p className="text-xs text-purple-100 mt-1">
-            Ideal para ventas al por mayor a tiendas y negocios
-          </p>
-        </div>
+        
       </div>
 
       <div className="flex justify-between items-center">
@@ -354,15 +346,10 @@ const SellerTaTDashboardPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">Órdenes B2B</h2>
-          <p className="text-gray-600 mt-1">Historial de pedidos al mayoreo</p>
+          <h2 className="text-3xl font-bold text-gray-900">Órdenes</h2>
+          <p className="text-gray-600 mt-1">Historial de pedidos</p>
         </div>
-        <button
-          onClick={() => setActiveSection('overview')}
-          className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-        >
-          ← Volver al Panel
-        </button>
+        
       </div>
       
       <Suspense fallback={<div className="text-center py-12">Cargando órdenes...</div>}>

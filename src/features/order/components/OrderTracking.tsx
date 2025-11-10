@@ -53,6 +53,12 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
   const [statusNotes, setStatusNotes] = useState('');
   const [updating, setUpdating] = useState(false);
 
+  const formatDate = (value?: string | number | Date) =>
+    value ? new Date(value).toLocaleDateString() : '—';
+
+  const formatDateTime = (value?: string | number | Date) =>
+    value ? new Date(value).toLocaleString() : '—';
+
   // Cargar tracking al montar o cuando cambie el orderId
   useEffect(() => {
     if (orderId) {
@@ -61,10 +67,13 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
         try {
           const orderData = await orderService.getOrderById(orderId);
           setOrder(orderData);
-          await loadOrderTracking(orderData.order_number);
-        } catch (err) {
+          if (orderData.order_number) {
+            await loadOrderTracking(orderData.order_number);
+          } else {
+            setError('La orden no tiene número asignado');
+          }
+        } catch (_err) {
           setError('Error al cargar la orden');
-          console.error('Error loading order:', err);
         }
       };
       loadOrderById();
@@ -95,10 +104,13 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
 
       const foundOrder = orders.results[0];
       setOrder(foundOrder);
-      await loadOrderTracking(foundOrder.order_number); // Usar order_number en lugar de id
+      if (foundOrder.order_number) {
+        await loadOrderTracking(foundOrder.order_number);
+      } else {
+        setError('La orden encontrada no tiene número asignado');
+      }
     } catch (err) {
       setError('Error al buscar la orden');
-      console.error('Error searching order:', err);
     } finally {
       setLoading(false);
     }
@@ -120,7 +132,6 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
       }
     } catch (err) {
       setError('Error al cargar el seguimiento de la orden');
-      console.error('Error loading tracking:', err);
     } finally {
       setLoading(false);
     }
@@ -153,7 +164,6 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
       }
     } catch (err) {
       setError('Error al actualizar el estado');
-      console.error('Error updating status:', err);
     } finally {
       setUpdating(false);
     }
@@ -264,7 +274,7 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
               </div>
               <div>
                 <p className="text-sm text-gray-600">
-                  Fecha: {new Date(order.created_date).toLocaleDateString()}
+                  Fecha: {formatDate(order?.created_date)}
                 </p>
                 <p className="text-sm text-gray-600">
                   Total: ${order.total_amount.toLocaleString()}
@@ -309,7 +319,7 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
                     <div>
                       <span className="font-medium text-blue-700">Entrega estimada:</span>
                       <p className="text-blue-600">
-                        {new Date(tracking.estimated_delivery).toLocaleDateString()}
+                        {formatDate(tracking.estimated_delivery)}
                       </p>
                     </div>
                   )}
@@ -348,7 +358,7 @@ export const OrderTrackingComponent: React.FC<OrderTrackingProps> = ({
                               {event.description}
                             </h4>
                             <time className="text-sm text-gray-500">
-                              {new Date(event.timestamp).toLocaleString()}
+                              {formatDateTime(event.timestamp)}
                             </time>
                           </div>
                           

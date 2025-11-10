@@ -28,6 +28,11 @@ class UserService {
     return UserService.instance;
   }
 
+  /** clase activacion de cuenta */
+  async activateAccount(payload: { uid: string; token: string }): Promise<void> {
+    await apiClient.post('/auth/users/activation/', payload);
+  }
+
   /**
    * Obtener lista de usuarios
    */
@@ -229,6 +234,27 @@ class UserService {
     }
     return null;
   }
+
+  /**
+   * Solicita el envío de correo para restablecer contraseña
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    await apiClient.post('/auth/users/reset_password/', { email });
+  }
+
+  /**
+   * Confirma el restablecimiento de contraseña usando el token enviado por email
+   */
+  async confirmResetPassword(payload: { uid: string; token: string; new_password: string }): Promise<void> {
+    await apiClient.post('/auth/users/reset_password_confirm/', {
+      uid: payload.uid,
+      token: payload.token,
+      new_password: payload.new_password,
+      re_new_password: payload.new_password,
+    });
+  }
+
+  
 }
 
 // Exportar instancia singleton

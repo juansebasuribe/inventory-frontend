@@ -31,7 +31,7 @@ const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   'seller': 'Vendedor',
   'seller_tt': 'Vendedor TT',
   'seller_executive': 'Ejecutivo de Ventas',
-  'administrator': 'Administrador'
+  
 };
 
 // ========================

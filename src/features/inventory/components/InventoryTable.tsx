@@ -66,9 +66,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   // Instrumentación: id de instancia y logs de montaje/desmontaje
   const _instanceId = useRef<string>(Math.random().toString(36).slice(2, 9));
   useEffect(() => {
-    console.log(`[mount] InventoryTable id=${_instanceId.current} time=${Date.now()}`);
     return () => {
-      console.log(`[unmount] InventoryTable id=${_instanceId.current} time=${Date.now()}`);
     };
   }, []);
 
@@ -79,8 +77,6 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
 
   const loadInventoryItems = async (page: number = 1, currentFilters = filters) => {
     try {
-      console.log(`[InventoryTable ${_instanceId.current}] loadInventoryItems page=${page} filters=${JSON.stringify(currentFilters)}`);
-      setLoading(true);
       setError('');
 
       const response = await inventoryService.getInventoryItems({
@@ -88,9 +84,6 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
         page_size: pageSize,
         ...currentFilters
       });
-
-      console.log(`[InventoryTable ${_instanceId.current}] loadInventoryItems response count=${response?.count}`);
-
       // Aplicar ordenamiento local si es necesario
       let sortedItems = response.results;
       if (sortField) {

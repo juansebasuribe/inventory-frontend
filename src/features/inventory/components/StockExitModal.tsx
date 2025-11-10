@@ -108,7 +108,6 @@ export const StockExitModal: React.FC<StockExitModalProps> = ({
         notes: formData.notes,
       });
 
-      console.log("✅ Salida de stock registrada");
       onSubmit();
       onClose();
       

@@ -65,11 +65,8 @@ export const LocationManager: React.FC = () => {
   const loadLocations = async () => {
     try {
       setLoading(true);
-      console.log('📍 Cargando ubicaciones...');
       const response = await apiClient.get<any>('/api/warehouse/v1/locations/');
-      console.log('✅ Ubicaciones cargadas:', response);
       setLocations(response.results || []);
-      console.log('Total ubicaciones:', response.results?.length || 0);
     } catch (error) {
       console.error('❌ Error loading locations:', error);
       setErrors({ general: 'Error al cargar las ubicaciones' });
@@ -122,12 +119,9 @@ export const LocationManager: React.FC = () => {
         if (rest.contact_email?.trim()) dataToUpdate.contact_email = rest.contact_email;
         if (rest.notes?.trim()) dataToUpdate.notes = rest.notes;
         
-        console.log('📝 Actualizando ubicación id:', editingId);
-        console.log('📦 Datos a enviar:', JSON.stringify(dataToUpdate, null, 2));
         
         await apiClient.patch(`/api/warehouse/v1/locations/${editingId}/`, dataToUpdate);
         setSuccessMessage('Ubicación actualizada exitosamente');
-        console.log('✅ Ubicación actualizada exitosamente');
       } else {
         // Crear nueva ubicación
         const dataToCreate: any = {
@@ -144,12 +138,9 @@ export const LocationManager: React.FC = () => {
         if (formData.contact_email?.trim()) dataToCreate.contact_email = formData.contact_email;
         if (formData.notes?.trim()) dataToCreate.notes = formData.notes;
         
-        console.log('✨ Creando nueva ubicación');
-        console.log('📦 Datos a enviar:', JSON.stringify(dataToCreate, null, 2));
         
         await apiClient.post('/api/warehouse/v1/locations/', dataToCreate);
         setSuccessMessage('Ubicación creada exitosamente');
-        console.log('✅ Ubicación creada exitosamente');
       }
 
       // Recargar lista y limpiar formulario
@@ -171,7 +162,6 @@ export const LocationManager: React.FC = () => {
   };
 
   const handleEdit = (location: Location) => {
-    console.log('📝 Editando ubicación:', location);
     setFormData({
       name: location.name,
       code: location.code,
@@ -186,11 +176,9 @@ export const LocationManager: React.FC = () => {
     setEditingId(location.id);
     setErrors({});
     setShowForm(true);
-    console.log('✅ Modal de edición abierto, editingId:', location.id);
   };
 
   const handleDelete = async (id: number) => {
-    console.log('🗑️ Intentando eliminar ubicación con id:', id);
     
     if (!window.confirm('⚠️ ¿Estás seguro de que deseas eliminar esta ubicación?\n\nNOTA: Solo administradores pueden eliminar ubicaciones.')) {
       return;
@@ -198,12 +186,10 @@ export const LocationManager: React.FC = () => {
     
     try {
       setLoading(true);
-      console.log('📡 Enviando DELETE a:', `/api/warehouse/v1/locations/${id}/`);
       await apiClient.delete(`/api/warehouse/v1/locations/${id}/`);
       setSuccessMessage('Ubicación eliminada exitosamente');
       await loadLocations();
       setTimeout(() => setSuccessMessage(''), 3000);
-      console.log('✅ Ubicación eliminada exitosamente');
     } catch (error: any) {
       console.error('❌ Error al eliminar ubicación:', error);
       console.error('Detalles del error:', error.response?.data);

@@ -98,7 +98,7 @@ export const StockEntryModal: React.FC<StockEntryModalProps> = ({
         notes: formData.notes,
       });
 
-      console.log("✅ Entrada de stock registrada");
+      
       onSubmit();
       onClose();
       

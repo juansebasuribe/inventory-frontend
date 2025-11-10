@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { orderService } from '../../products/services/orderService';
 import type { Order, OrderFilters } from '../../products/services/orderService';
+type OrderWithDiscount = Order & { total_discount?: number; discount_amount?: number };
 import { useAuth } from '../../../shared/stores';
 
 interface OrderHistoryProps {
@@ -18,13 +19,16 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
 }) => {
   const { user } = useAuth();
   const userRole = user?.profile?.role;
-  const isSeller = userRole === 'seller' || userRole === 'seller_tt';
+  const isSeller =
+    userRole === 'seller' ||
+    userRole === 'seller_tt' ||
+    userRole === 'seller_executive';
   
   // Estados
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderWithDiscount[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithDiscount | null>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
   const [orderDetailError, setOrderDetailError] = useState('');
@@ -57,13 +61,8 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
 
       const response = await orderService.getOrders(sellerFilters);
       
-      console.log('📦 Órdenes recibidas del backend:', response);
-      console.log('📊 Total órdenes:', response.count);
-      console.log('📋 Results:', response.results);
-      console.log('👤 Usuario actual:', user?.username, 'ID:', user?.id);
-      console.log('🔒 Es seller:', isSeller);
       
-      // Debug: Ver el status de cada orden
+      /*// Debug: Ver el status de cada orden
       response.results?.forEach((order, index) => {
         console.log(`🔍 Orden ${index + 1}:`, {
           id: order.order_uuid || order.id,
@@ -71,7 +70,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
           status_display: order.status_display,
           seller: order.seller?.username
         });
-      });
+      });*/
       
       setOrders(response.results || []);
       setTotalCount(response.count || 0);
@@ -159,7 +158,6 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
 
     try {
       setLoading(true);
-      console.log('👮 Confirmando orden:', order.order_uuid || order.id);
       
       // El backend espera el status en MAYÚSCULAS
       await orderService.updateOrderStatus(order.order_uuid || order.id, {
@@ -445,7 +443,6 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                console.log('🔘 Aprobando orden:', order);
                                 handleApproveOrder(order);
                               }}
                               className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-xs font-medium"
@@ -693,7 +690,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({
                   </div>
                   {(() => {
                     const discountTotal =
-                      selectedOrder.total_discount ?? selectedOrder.discount_amount ?? 0;
+                      selectedOrder?.total_discount ?? selectedOrder?.discount_amount ?? 0;
                     if (discountTotal > 0) {
                       return (
                         <div className="flex justify-between text-green-600">

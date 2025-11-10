@@ -38,6 +38,7 @@ export interface Order {
   items?: OrderItem[];
   created_date: string;
   updated_date: string;
+  discount_amount?: number;
 }
 
 export interface CreateOrderData {

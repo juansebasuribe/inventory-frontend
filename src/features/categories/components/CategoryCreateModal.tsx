@@ -75,7 +75,7 @@ export const CategoryCreateModal: React.FC<CategoryCreateModalProps> = ({
 
       const newCategory = await categoryService.createCategory(categoryData);
       
-      console.log('✅ Categoría creada exitosamente:', newCategory);
+      
       
       // Resetear formulario
       setFormData({

@@ -592,9 +592,6 @@ export const AdminProductsPage: React.FC = () => {
         min_quantity: minStock,
         max_quantity: maxStock,
       });
-
-      console.log('Límites de stock actualizados:', response);
-
       // Recargar los datos para reflejar los cambios
       await loadData();
 
@@ -673,9 +670,7 @@ export const AdminProductsPage: React.FC = () => {
       
       // Llamar al servicio para eliminar el producto (usa bar_code)
       await productService.deleteProduct(product.bar_code);
-      
-      console.log(`Producto ${product.bar_code} eliminado exitosamente`);
-      
+            
       // Recargar los datos
       await loadData();
       

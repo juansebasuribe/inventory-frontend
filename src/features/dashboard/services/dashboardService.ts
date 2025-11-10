@@ -73,8 +73,7 @@ class DashboardService {
    * Obtiene todas las métricas del dashboard en paralelo
    */
   async getDashboardMetrics(): Promise<DashboardMetrics> {
-    console.log('📊 [DashboardService] Cargando métricas...');
-
+    
     try {
       // Ejecutar todas las peticiones en paralelo
       const [
@@ -102,8 +101,6 @@ class DashboardService {
         deliveredOrders: orderSummaryData.status === 'fulfilled' ? orderSummaryData.value.delivered : 0,
         revenue: 0, // Por ahora en 0, podemos calcularlo después desde las órdenes
       };
-
-      console.log('✅ [DashboardService] Métricas cargadas:', metrics);
       return metrics;
     } catch (error) {
       console.error('❌ [DashboardService] Error al cargar métricas:', error);

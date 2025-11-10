@@ -48,13 +48,6 @@ export const StockAlerts: React.FC<StockAlertsProps> = ({
   const [filterType, setFilterType] = useState<string>('all');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
 
-  // Instrumentación: id de instancia y logs de montaje/desmontaje
-  const _instanceId = useRef<string>(Math.random().toString(36).slice(2, 9));
-  useEffect(() => {
-    console.log(`[mount] StockAlerts id=${_instanceId.current} time=${Date.now()}`);
-    return () => console.log(`[unmount] StockAlerts id=${_instanceId.current} time=${Date.now()}`);
-  }, []);
-
   // Cargar alertas
   useEffect(() => {
     loadAlerts();
@@ -67,7 +60,7 @@ export const StockAlerts: React.FC<StockAlertsProps> = ({
 
   const loadAlerts = async () => {
     try {
-      console.log(`[StockAlerts ${_instanceId.current}] loadAlerts showResolved=${showResolved}`);
+     
       setLoading(true);
       setError('');
 
@@ -77,7 +70,6 @@ export const StockAlerts: React.FC<StockAlertsProps> = ({
 
       // getStockAlerts devuelve AlertListResponse, getUnresolvedAlerts devuelve StockAlert[]
       const alertsData = Array.isArray(response) ? response : response.results;
-      console.log(`[StockAlerts ${_instanceId.current}] loaded ${alertsData.length} alerts`);
       setAlerts(alertsData);
     } catch (err: any) {
       setError(err.message || 'Error al cargar alertas');

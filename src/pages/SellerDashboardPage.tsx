@@ -84,10 +84,10 @@ const SellerDashboardPage: React.FC = () => {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-blue-900">
-              Precio Vendedor Seller (+20%)
+              Productos Tita comercializadora
             </h3>
             <p className="text-sm text-blue-700 mt-1">
-              Los precios que ves incluyen un 20% sobre el costo base. Este es tu precio de venta para clientes.
+              Busca tus productos y genera la orden de compra
             </p>
           </div>
         </div>

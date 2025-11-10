@@ -66,12 +66,6 @@ const ProductList: React.FC<ProductListProps> = ({
 
   const _instanceId = React.useRef(Math.random().toString(36).slice(2, 9));
   React.useEffect(() => {
-    // tslint:disable-next-line:no-console
-    console.log(`[mount] ProductList id=${_instanceId.current} time=${Date.now()}`);
-    return () => {
-      // tslint:disable-next-line:no-console
-      console.log(`[unmount] ProductList id=${_instanceId.current} time=${Date.now()}`);
-    };
   }, []);
 
   // Cargar productos
@@ -123,7 +117,7 @@ const ProductList: React.FC<ProductListProps> = ({
       hasRefreshedOnce.current = true;
       return;
     }
-    console.log(`[ProductList ${_instanceId.current}] refreshToken=${refreshToken}`);
+    
     loadProducts(pagination.currentPage || 1, filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshToken]);

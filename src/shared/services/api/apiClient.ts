@@ -136,11 +136,11 @@ export class ApiClient {
         if (this.authTokens?.access && !isJwtEndpoint(config.url)) {
           config.headers.Authorization = `JWT ${this.authTokens.access}`;
           if (import.meta.env.DEV) {
-            console.log(`🔑 Sending request to ${config.url} with token:`, this.authTokens.access.substring(0, 20) + '...');
+            
           }
         } else {
           if (import.meta.env.DEV) {
-            console.log(`⚠️ No auth token available for request to ${config.url}`);
+
           }
         }
         
@@ -155,13 +155,6 @@ export class ApiClient {
     // Response interceptor for error handling
     this.axiosInstance.interceptors.response.use(
       (response) => {
-        // Log response time in development
-        if (import.meta.env.DEV) {
-          const endTime = Date.now();
-          const startTime = (response.config as any).startTime || endTime;
-          console.log(`API call to ${response.config.url} took ${endTime - startTime}ms`);
-        }
-        
         return response;
       },
       async (error) => {
@@ -377,18 +370,10 @@ export class ApiClient {
   // AUTHENTICATION
   // ========================
   setAuthTokens(tokens: AuthTokens): void {
-    console.log('🔑 Setting auth tokens:', tokens);
-    console.log('🔑 Tokens type:', typeof tokens);
-    console.log('🔑 Tokens keys:', Object.keys(tokens || {}));
-    
     this.authTokens = tokens;
     localStorage.setItem('auth_tokens', JSON.stringify(tokens));
     
     if (import.meta.env.DEV) {
-      console.log('🔐 Auth tokens set:', {
-        access: tokens.access ? tokens.access.substring(0, 20) + '...' : 'null',
-        refresh: tokens.refresh ? tokens.refresh.substring(0, 20) + '...' : 'null'
-      });
     }
   }
 

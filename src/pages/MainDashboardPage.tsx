@@ -146,7 +146,6 @@ const MainDashboardPage: React.FC = () => {
   }, []);
 
   const handleProductUpdated = useCallback((product: any) => {
-    console.log('✅ Producto actualizado:', product);
 
     // Cerrar modal de forma síncrona para que React retire el árbol del modal
     try {
@@ -154,7 +153,6 @@ const MainDashboardPage: React.FC = () => {
         setShowEditProductModal(false);
         setProductToEdit(null);
       });
-      console.log('[MainDashboardPage] flushSync: modal cerrado');
     } catch (e) {
       // En entornos donde flushSync no tenga efecto, caeremos al fallback
       console.warn('[MainDashboardPage] flushSync falló, usando fallback', e);
@@ -165,7 +163,6 @@ const MainDashboardPage: React.FC = () => {
     // Forzar desmontaje del listado y refrescar de forma ordenada
     setRefreshKey(prev => {
       const next = prev + 1;
-      console.log('[MainDashboardPage] refreshKey ->', next);
       return next;
     });
   }, []);
@@ -177,13 +174,11 @@ const MainDashboardPage: React.FC = () => {
   }, []);
 
   const handleUserCreated = useCallback(() => {
-    console.log('✅ Usuario creado');
     setRefreshKey(prev => prev + 1);
     setShowCreateUserModal(false);
   }, []);
 
   const handleUserUpdated = useCallback(() => {
-    console.log('✅ Usuario actualizado');
     setRefreshKey(prev => prev + 1);
     setShowEditUserModal(false);
     setUserToEdit(null);
@@ -730,11 +725,9 @@ const MainDashboardPage: React.FC = () => {
         isOpen={cartOpen}
         onClose={() => setCartOpen(false)}
         onCheckout={() => {
-          console.log('Proceeding to checkout');
           setCartOpen(false);
         }}
-        onItemUpdate={(item) => console.log('Item updated:', item)}
-        onItemRemove={(itemId) => console.log('Item removed:', itemId)}
+        
       />
 
       {/* Modales con Lazy Loading */}
@@ -744,7 +737,6 @@ const MainDashboardPage: React.FC = () => {
             isOpen={showCreateProductModal}
             onClose={() => setShowCreateProductModal(false)}
             onProductCreated={(product: any) => {
-              console.log('Product created:', product);
               setShowCreateProductModal(false);
               setRefreshKey(prev => prev + 1);
             }}
@@ -758,7 +750,6 @@ const MainDashboardPage: React.FC = () => {
             isOpen={showCreateCategoryModal}
             onClose={() => setShowCreateCategoryModal(false)}
             onCategoryCreated={(category: any) => {
-              console.log('✅ Category created:', category);
               setShowCreateCategoryModal(false);
               // Usar setTimeout para evitar conflictos con el cierre del modal
               setTimeout(() => {
@@ -775,7 +766,6 @@ const MainDashboardPage: React.FC = () => {
             isOpen={showCreateProviderModal}
             onClose={() => setShowCreateProviderModal(false)}
             onProviderCreated={(provider: any) => {
-              console.log('✅ Provider created:', provider);
               setShowCreateProviderModal(false);
               // Usar setTimeout para evitar conflictos con el cierre del modal
               setTimeout(() => {
@@ -796,7 +786,6 @@ const MainDashboardPage: React.FC = () => {
             }}
             provider={providerToEdit}
             onProviderUpdated={(provider: any) => {
-              console.log('✅ Provider updated:', provider);
               setShowEditProviderModal(false);
               setProviderToEdit(null);
               setRefreshKey(prev => prev + 1);
